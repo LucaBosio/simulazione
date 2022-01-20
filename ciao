@@ -59,7 +59,7 @@ class nucleus:
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(25*zoom * size, 5*zoom * size), (18*zoom * size, zoom * size * 15), (zoom * size * 25, zoom * 25 * size)], 0)
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 25*zoom * size), (15*zoom * size, zoom * size * 18), (zoom * size * 25, zoom * 25 * size)], 0)
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 5*zoom * size), (12*zoom * size, zoom * size * 15), (zoom * size * 5, zoom * 25 * size)], 0)
-            pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito, 0)
+            pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito * size, 0)
         rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
         surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
 
