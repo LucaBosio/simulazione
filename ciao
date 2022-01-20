@@ -1,3 +1,4 @@
+
 import pygame
 import random
 import sys
@@ -59,7 +60,7 @@ class nucleus:
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(25*zoom * size, 5*zoom * size), (18*zoom * size, zoom * size * 15), (zoom * size * 25, zoom * 25 * size)], 0)
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 25*zoom * size), (15*zoom * size, zoom * size * 18), (zoom * size * 25, zoom * 25 * size)], 0)
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 5*zoom * size), (12*zoom * size, zoom * size * 15), (zoom * size * 5, zoom * 25 * size)], 0)
-            pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito * size, 0)
+            pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito, 0)
         rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
         surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
 
@@ -562,7 +563,7 @@ class Veicle:
         self.ax = 0
         self.ay = 0
         self.friction = 0
-        self.mass = 5*self.r
+        self.mass = 20*self.r
         self.angle = random.uniform(-math.pi, math.pi)
         self.spawn_range = 1000
         self.sail = 0
@@ -622,29 +623,35 @@ class Veicle:
     def move(self):
         global numero_veicle
         self.move_check = False
-        self.mass = 5*self.r
+        self.mass = 20*self.r
         somma = 0
         for i in range(self.DNA[0]):
             if self.block[i].life > 0:
                 somma = somma + 1
         self.energy = somma
         if self.sail>0:
-            self.xforce = self.xforce + random.uniform(-0.05, 0.05) * cursore_velocita * self.sail
-            self.yforce = self.yforce + random.uniform(-0.05, 0.05) * cursore_velocita * self.sail
+            self.xforce = self.xforce + random.uniform(-0.1, 0.1) * cursore_velocita * self.sail
+            self.yforce = self.yforce + random.uniform(-0.1, 0.1) * cursore_velocita * self.sail
             self.torsion_force = self.torsion_force + random.uniform(-0.05, 0.05) * cursore_velocita * self.sail
         self.ax = self.xforce/ self.mass
         self.ay = self.yforce/ self.mass
-        self.vx = self.vx + self.ax - 0.1 * self.vx ** 3
-        self.vy = self.vy + self.ay - 0.1 * self.vy ** 3
-        if self.vx < 0.05:
+        self.vx = self.vx + (self.ax - 0.1*math.sqrt(self.vx ** 2)*self.vx) * velocita
+        self.vy = self.vy + (self.ay - 0.1*math.sqrt(self.vy ** 2)*self.vy) * velocita
+        if self.vx < 0.05 and self.vx > -0.05:
             self.vx = 0
-        if self.vy < 0.05:
+        if self.vy < 0.05 and self.vy > -0.05:
             self.vy = 0
         #self.d = math.atan2(self.yforce, self.xforce)
         xx=self.x
         yy=self.y
         self.x = self.x + self.vx * velocita
         self.y = self.y + self.vy * velocita
+        if self.vx > 100 or self.vx < -100:
+            self.life = 0
+            print("ciao")
+        if self.vy > 100 or self.vy < -100:
+            self.life = 0
+            print("wow")
         self.v = math.sqrt(self.vx**2+self.vy**2)
         if xx != self.x and yy != self.y:
             self.move_check = True
@@ -658,12 +665,12 @@ class Veicle:
                 new_veicle(self.x, self.y, 0, self.spawn_range, self.DNA)
                 numero_veicle += 1
                 self.r = 1
-        self.velocita_angolare += (self.torsion_force/self.mass*0.1-10000*self.r*(self.velocita_angolare)**3)*0.01
+        self.velocita_angolare += (self.torsion_force/self.mass*0.1-1000*self.r*math.sqrt(self.velocita_angolare**2)*self.velocita_angolare)*0.01
         self.angle += self.velocita_angolare*velocita
 
 
     def see(self,id):
-        if self.move_check or self.collision_detection:
+        if self.move_check:
             self.timer_ottimizazzione += 1
             self.see_veicle(id)
             self.see_bordi()
@@ -682,7 +689,7 @@ class Veicle:
                     if distanza < (100 * velocita * self.max_speed + 500):
                         self.numero_veicle_vicini += 1
                         self.veicle_vicini.append(i)
-        distanza_veicle_piu_vicino = 200
+        distanza_veicle_piu_vicino = 400
         for i in range(self.numero_veicle_vicini):
             g = self.veicle_vicini[i]
             if g < numero_veicle:
@@ -695,6 +702,7 @@ class Veicle:
                             #self.d = self.d + (math.atan2(veicle[pianta_piu_vicina].y - self.y, veicle[pianta_piu_vicina].x - self.x) - self.d)
                         if distanza_veicle_piu_vicino < 400:
                             self.id_collision_detection = g
+                            #self.collision_detection = True
                             #for ii in range(self.DNA[0]):
                                 #if self.block[ii].collision_detection(pianta_piu_vicina,self.x,self.y,-self.angle,self.r):
                                     #self.life = 0
@@ -703,16 +711,28 @@ class Veicle:
     def see_bordi(self):
         if self.x > map_x_size/2:
             self.vx = -self.vx
+            self.x = self.x + self.vx * velocita
             self.torsion_force = 0
+            self.xforce = 0
+            self.ax = 0
         if self.y > map_y_size/2:
             self.vy = -self.vy
+            self.y = self.y + self.vy * velocita
             self.torsion_force = 0
+            self.yforce = 0
+            self.ay = 0
         if self.x < -map_x_size/2:
             self.vx = -self.vx
+            self.x = self.x + self.vx * velocita
             self.torsion_force = 0
+            self.xforce = 0
+            self.ax = 0
         if self.y < -map_y_size/2:
             self.vy = -self.vy
+            self.y = self.y + self.vy * velocita
             self.torsion_force = 0
+            self.yforce = 0
+            self.ay = 0
         if self.x > map_x_size/2+10:
             self.life = 0
         if self.y > map_y_size/2+10:
@@ -728,13 +748,28 @@ class Veicle:
             X = (self.x + x) * zoom + j / 2
             Y = (self.y + y) * zoom + k / 2
             if X>0 and Y>0 and X<j and Y < k:
-                pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom*(400), 2)
+                if self.collision_detection:
+                    pygame.draw.circle(SCHERMO, (255, 0, 0), (X, Y), zoom*(400), 2)
+                else:
+                    pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom * (400), 2)
                 #pygame.draw.circle(SCHERMO, (0, 155, 0), (X, Y), 2 * zoom * 50, 0)
                 for i in range(self.DNA[0]):
                     #if self.DNA[i*3+3] == 12:
                         #pygame.draw.line(SCHERMO, (150, 150, 150), (X, Y), (X + math.sin(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.sin(self.angle + math.pi / 2) * zoom * self.r * 30 * self.DNA[i*3+2],Y + math.cos(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.cos(self.angle + math.pi / 2) * zoom * self.r * 30 *self.DNA[i*3+2]), int(5 * zoom * self.r))
                     if self.block[i].life>0:
                         self.block[i].draw(SCHERMO, [0, 0, zoom*self.r*30, zoom*self.r*30], self.r, self.angle, 0, X, Y)
+                #A = FONT1.render(str(self.vx), True, (0, 0, 0))
+                #SCHERMO.blit(A, (X, Y-45))
+                #B = FONT1.render(str(self.xforce), True, (0, 0, 0))
+                #SCHERMO.blit(B, (X, Y-30))
+                #C = FONT1.render(str(self.ax), True, (0, 0, 0))
+                #SCHERMO.blit(C, (X, Y-15))
+                #D = FONT1.render(str(self.collision_detection), True, (0, 0, 0))
+                #SCHERMO.blit(D, (X, Y))
+                #E = FONT1.render(str(self.id_collision_detection), True, (0, 0, 0))
+                #SCHERMO.blit(E, (X, Y+15))
+                #F = FONT1.render(str(self.numero_veicle_vicini), True, (0, 0, 0))
+                #SCHERMO.blit(F, (X, Y+30))
                 #numero = FONT1.render(str(self.numero_veicle_vicini), True, (0, 0, 0))
                 #SCHERMO.blit(numero, (X, Y))
 
@@ -826,18 +861,17 @@ def collision_detection(id1,id2):
                             veicle[id2].velocita_angolare = 0
                             veicle[id1].block[ii].life -= impatto/20*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage
                             veicle[id2].block[i].life -= impatto/20*veicle[id1].block[ii].impact_damage+0.1+veicle[id1].block[ii].damage
-                            if veicle[id1].block[ii].life == 0:
+                            veicle[id1].xforce = 0
+                            veicle[id1].yforce = 0
+                            veicle[id2].xforce = 0
+                            veicle[id2].yforce = 0
+                            if veicle[id1].block[ii].life <= 0:
                                 if veicle[id1].block[ii].r==3:
                                     veicle[id1].sail -= 1
-                                    veicle[id1].xforce = 0
-                                    veicle[id1].yforce = 0
                                     veicle[id1].torsion_force = 0
-                                    print("ciao")
-                            if veicle[id2].block[i].life == 0:
+                            if veicle[id2].block[i].life <= 0:
                                if veicle[id2].block[i].r==3:
                                     veicle[id2].sail -= 1
-                                    veicle[id2].xforce = 0
-                                    veicle[id2].yforce = 0
                                     veicle[id2].torsion_force = 0
 
 
