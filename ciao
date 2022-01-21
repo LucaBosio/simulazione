@@ -20,10 +20,12 @@ velocita = 1
 cursore_velocita = 1
 x = 0
 y = 0
-map_x_size = 10000
-map_y_size = 10000
+map_x_size = 100000
+map_y_size = 100000
 numero_veicle = 0
+numero_mass = 0
 press_timer = 0
+mass = []
 
 
 def dist(p1x, p1y, p2x, p2y):
@@ -31,9 +33,30 @@ def dist(p1x, p1y, p2x, p2y):
     return dist
 
 
+class Mass:
+    def __init__(self,xx,yy,mass):
+        self.x = xx
+        self.y = yy
+        self.mass = mass
+
+
+    def move(self,i):
+        global numero_mass
+        global mass
+        self.mass -= 1*velocita
+
+    def show(self):
+        j, k = SCHERMO.get_size()
+        X = (self.x + x) * zoom + j / 2
+        Y = (self.y + y) * zoom + k / 2
+        pygame.draw.circle(SCHERMO, (200, 0, 0), (X, Y), zoom *15 *self.mass/1000, 0)
+        if zoom > 0.4:
+            pygame.draw.circle(SCHERMO, (100, 0, 0), (X, Y), zoom * 15*self.mass/1000, int(zoom*2*self.mass/1000))
+            pygame.draw.circle(SCHERMO, (150, 0, 0), (X, Y), zoom * 10*self.mass/1000, 0)
+
+
 class nucleus:
     def __init__(self,xx,yy):
-        self.life = 1
         self.x = xx
         self.y = yy
         self.battito = 7
@@ -41,6 +64,7 @@ class nucleus:
         self.r = 1
         self.impact_damage=1
         self.damage=0
+        self.mass = 1
 
 
     def energy(self):
@@ -60,7 +84,7 @@ class nucleus:
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(25*zoom * size, 5*zoom * size), (18*zoom * size, zoom * size * 15), (zoom * size * 25, zoom * 25 * size)], 0)
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 25*zoom * size), (15*zoom * size, zoom * size * 18), (zoom * size * 25, zoom * 25 * size)], 0)
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 5*zoom * size), (12*zoom * size, zoom * size * 15), (zoom * size * 5, zoom * 25 * size)], 0)
-            pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito, 0)
+            pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito * size, 0)
         rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
         surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
 
@@ -74,6 +98,7 @@ class repulsion:
         self.r = 1
         self.impact_damage=1
         self.damage=0
+        self.mass = 1
 
 
     def energy(self):
@@ -104,6 +129,7 @@ class leaf:
         self.r = 1
         self.impact_damage=0.1
         self.damage=0
+        self.mass = 0.1
 
 
     def energy(self):
@@ -129,6 +155,7 @@ class mouth1:
         self.r = 1
         self.impact_damage=10
         self.damage=10
+        self.mass = 1
 
 
     def energy(self):
@@ -169,6 +196,7 @@ class mouth2:
         self.r = 1
         self.impact_damage=10
         self.damage=10
+        self.mass = 1
 
 
     def energy(self):
@@ -209,6 +237,7 @@ class mouth3:
         self.r = 1
         self.impact_damage=10
         self.damage=10
+        self.mass = 1
 
 
     def energy(self):
@@ -249,6 +278,7 @@ class mouth4:
         self.r = 1
         self.impact_damage=10
         self.damage=10
+        self.mass = 1
 
 
     def energy(self):
@@ -287,6 +317,7 @@ class shell:
         self.r = 1
         self.impact_damage=1
         self.damage=0
+        self.mass = 1
 
 
     def energy(self):
@@ -312,6 +343,7 @@ class sensor:
         self.r = 0.5
         self.impact_damage=0.5
         self.damage=0
+        self.mass = 0.5
 
 
     def energy(self):
@@ -339,6 +371,7 @@ class spike_1:
         self.r = 0.5
         self.impact_damage=10
         self.damage=0
+        self.mass = 0.5
 
 
     def energy(self):
@@ -363,6 +396,7 @@ class spike_2:
         self.r = 0.5
         self.impact_damage=10
         self.damage=0
+        self.mass = 0.5
 
 
     def energy(self):
@@ -387,6 +421,7 @@ class spike_3:
         self.r = 0.5
         self.impact_damage=10
         self.damage=0
+        self.mass = 0.5
 
 
     def energy(self):
@@ -411,6 +446,7 @@ class spike_4:
         self.r = 0.5
         self.impact_damage=10
         self.damage=0
+        self.mass = 0.5
 
 
     def energy(self):
@@ -435,6 +471,7 @@ class sail_1:
         self.r = 3
         self.impact_damage=0.5
         self.damage=0
+        self.mass = 1
 
 
     def energy(self):
@@ -466,6 +503,7 @@ class sail_2:
         self.r = 3
         self.impact_damage=0.5
         self.damage=0
+        self.mass = 1
 
     def energy(self):
         return 0
@@ -498,6 +536,7 @@ class sail_3:
         self.r = 3
         self.impact_damage=0.5
         self.damage=0
+        self.mass = 1
 
     def energy(self):
         return 0
@@ -528,6 +567,7 @@ class sail_4:
         self.r = 3
         self.impact_damage=0.5
         self.damage=0
+        self.mass = 1
 
     def energy(self):
         return 0
@@ -551,6 +591,7 @@ class sail_4:
 
 class Veicle:
     def __init__(self, xp, yp, r, xforce, yforce, DNA):
+        self.age = r*100
         self.x = xp
         self.y = yp
         self.r = (r + random.randint(-100, 100)) / 1000 + 1
@@ -610,7 +651,7 @@ class Veicle:
         self.energy = 1000
         self.DNA = DNA
         self.timer_ottimizazzione = random.randint(0, 100)
-        self.max_speed = 20
+        self.max_speed = 10
         self.numero_veicle_vicini = 0
         self.veicle_vicini = []
         self.id_collision_detection = 1000000
@@ -622,7 +663,7 @@ class Veicle:
 
     def move(self):
         global numero_veicle
-        self.move_check = False
+        self.age +=  velocita
         self.mass = 20*self.r
         somma = 0
         for i in range(self.DNA[0]):
@@ -642,8 +683,6 @@ class Veicle:
         if self.vy < 0.05 and self.vy > -0.05:
             self.vy = 0
         #self.d = math.atan2(self.yforce, self.xforce)
-        xx=self.x
-        yy=self.y
         self.x = self.x + self.vx * velocita
         self.y = self.y + self.vy * velocita
         if self.vx > 100 or self.vx < -100:
@@ -653,10 +692,17 @@ class Veicle:
             self.life = 0
             print("wow")
         self.v = math.sqrt(self.vx**2+self.vy**2)
-        if xx != self.x and yy != self.y:
+        if self.vx != 0 or self.vy != 0:
             self.move_check = True
-        if self.energy <= 0:
+        else:
+            self.move_check = False
+            self.timer_ottimizazzione = 100
+        if self.energy <= 0 or self.age>100000:
+            print("minchia")
             self.life = 0
+        if self.block[0].life <= 0:
+            self.life = 0
+            print("miao")
         if self.r < 2:
             self.r += 0.0001 * velocita
         if self.r >= 2:
@@ -665,7 +711,7 @@ class Veicle:
                 new_veicle(self.x, self.y, 0, self.spawn_range, self.DNA)
                 numero_veicle += 1
                 self.r = 1
-        self.velocita_angolare += (self.torsion_force/self.mass*0.1-1000*self.r*math.sqrt(self.velocita_angolare**2)*self.velocita_angolare)*0.01
+        self.velocita_angolare += (self.torsion_force/self.mass*0.1-1000*self.r*math.sqrt(self.velocita_angolare**2)*(self.velocita_angolare+0.001))*0.01
         self.angle += self.velocita_angolare*velocita
 
 
@@ -690,13 +736,14 @@ class Veicle:
                         self.numero_veicle_vicini += 1
                         self.veicle_vicini.append(i)
         distanza_veicle_piu_vicino = 400
+        g = 1000000
         for i in range(self.numero_veicle_vicini):
             g = self.veicle_vicini[i]
             if g < numero_veicle:
                 if g != id:
                     distanza = dist(self.x, self.y, veicle[g].x, veicle[g].y)
                     if distanza < distanza_veicle_piu_vicino:
-                        pianta_piu_vicina = g
+                        #pianta_piu_vicina = g
                         distanza_veicle_piu_vicino = distanza
                         #if distanza_pianta_piu_vicina < 200*self.sense:
                             #self.d = self.d + (math.atan2(veicle[pianta_piu_vicina].y - self.y, veicle[pianta_piu_vicina].x - self.x) - self.d)
@@ -742,7 +789,7 @@ class Veicle:
         if self.y < -map_y_size/2-10:
             self.life = 0
 
-    def show(self):
+    def show(self,id):
         if zoom > 0.1 :
             j, k = SCHERMO.get_size()
             X = (self.x + x) * zoom + j / 2
@@ -758,15 +805,15 @@ class Veicle:
                         #pygame.draw.line(SCHERMO, (150, 150, 150), (X, Y), (X + math.sin(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.sin(self.angle + math.pi / 2) * zoom * self.r * 30 * self.DNA[i*3+2],Y + math.cos(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.cos(self.angle + math.pi / 2) * zoom * self.r * 30 *self.DNA[i*3+2]), int(5 * zoom * self.r))
                     if self.block[i].life>0:
                         self.block[i].draw(SCHERMO, [0, 0, zoom*self.r*30, zoom*self.r*30], self.r, self.angle, 0, X, Y)
-                #A = FONT1.render(str(self.vx), True, (0, 0, 0))
+                #A = FONT1.render(str(self.id_collision_detection), True, (0, 0, 0))
                 #SCHERMO.blit(A, (X, Y-45))
-                #B = FONT1.render(str(self.xforce), True, (0, 0, 0))
+                #B = FONT1.render(str(id), True, (0, 0, 0))
                 #SCHERMO.blit(B, (X, Y-30))
-                #C = FONT1.render(str(self.ax), True, (0, 0, 0))
+                #C = FONT1.render(str(self.move_check), True, (0, 0, 0))
                 #SCHERMO.blit(C, (X, Y-15))
-                #D = FONT1.render(str(self.collision_detection), True, (0, 0, 0))
+                #D = FONT1.render(str(self.vx), True, (0, 0, 0))
                 #SCHERMO.blit(D, (X, Y))
-                #E = FONT1.render(str(self.id_collision_detection), True, (0, 0, 0))
+                #E = FONT1.render(str(self.vy), True, (0, 0, 0))
                 #SCHERMO.blit(E, (X, Y+15))
                 #F = FONT1.render(str(self.numero_veicle_vicini), True, (0, 0, 0))
                 #SCHERMO.blit(F, (X, Y+30))
@@ -790,6 +837,12 @@ def delete_veicle(ii):
     veicle[ii]=veicle[numero_veicle - 1]
     veicle.pop(numero_veicle - 1)
 
+
+def delete_mass(i):
+    mass[i]=mass[numero_mass - 1]
+    mass.pop(numero_mass - 1)
+
+
 def new_veicle(xp, yp, r, spawn_range,DNA):
     xv = xp + random.randint(-spawn_range, spawn_range)
     yv = yp + random.randint(-spawn_range, spawn_range)
@@ -797,84 +850,87 @@ def new_veicle(xp, yp, r, spawn_range,DNA):
 
 
 def collision_detection(id1,id2):
-        xx=veicle[id1].x
-        yy=veicle[id1].y
-        g=id2
-        angle=veicle[id1].angle
-        size=veicle[id1].r
-        for ii in range(veicle[id1].DNA[0]):
-            if veicle[id1].block[ii].life > 0:
-                pos1x = xx + math.sin(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.sin(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
-                pos1y = yy + math.cos(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.cos(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
-                for i in range(veicle[g].DNA[0]):
-                    if veicle[id2].block[i].life > 0:
-                        pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]
-                        pos2y = veicle[g].y + math.cos(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.cos(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]
-                        if dist(pos1x,pos1y,pos2x,pos2y) <= size * 15 * veicle[id1].block[ii].r + veicle[g].r * 15 * veicle[id2].block[i].r :
-                            #if veicle[id1].block[ii]==sail_1 or veicle[id1].block[ii]==sail_2 or veicle[id1].block[ii]==sail_3 or veicle[id1].block[ii]==sail_4:
-                            m1 = veicle[id1].mass
-                            m2 = veicle[id2].mass
-                            vx1 = veicle[id1].vx
-                            vx2 = veicle[id2].vx
-                            vy1 = veicle[id1].vy
-                            vy2 = veicle[id2].vy
-                            r1 = math.sqrt((pos1x - xx) ** 2 + (pos1y - yy) ** 2)
-                            r2 = math.sqrt((pos2x - veicle[g].x) ** 2 + (pos2y - veicle[g].y) ** 2)
-                            w1 = veicle[id1].velocita_angolare
-                            w2 = veicle[id2].velocita_angolare
-                            a1 = veicle[id1].angle
-                            a2 = veicle[id2].angle
-                            vtx1 = vx1 + w1 * r1 * math.sin(a1)
-                            vtx2 = vx2 + w2 * r2 * math.sin(a2)
-                            vty1 = vy1 + w1 * r1 * math.cos(a1)
-                            vty2 = vy2 + w2 * r2 * math.cos(a2)
-                            vfx1 = (m1 - m2) * vtx1 / (m1 + m2) + 2 * m2 * vtx2 / (m1 + m2)
-                            vfx2 = (m1 - m2) * vtx2 / (m1 + m2) + 2 * m2 * vtx1 / (m1 + m2)
-                            vfy1 = (m1 - m2) * vty1 / (m1 + m2) + 2 * m2 * vty2 / (m1 + m2)
-                            vfy2 = (m1 - m2) * vty2 / (m1 + m2) + 2 * m2 * vty1 / (m1 + m2)
-                            #velocita_inpattox=vx1+w1*r1*math.sin(a1)-(vx2+w2*r2*math.sin(a2))
-                            #velocita_inpattoy = vy1 + w1 * r1 * math.cos(a1) - (vy2 + w2 * r2 * math.cos(a2))
-                            #Ti=m1*v1 + r1*m1*w1 + m2*v2 + r2*m2*w2
-                            #Ei=0.5*m1*r1**2*w1**2+0.5*m1*v1**2+0.5*m2*r2**2*w2**2+0.5*m2*v2**2
-                            #delta=4*Ti**2*m2**2-4*(m2**2+m1*m2)*(Ti**2-2*Ei*m1)
-                            #if delta < 0:
-                                #delta = -delta
-                            #v2=2*Ti*m2/(2*m2**2+2*m1*m2)
-                            #v1=(Ti-m2*v2)/m1
-                            #print(v2)
-                            #angolo=math.atan2(yy-veicle[g].y,xx-veicle[g].x)
-                            #veicle[id1].d = angolo
-                            #veicle[id2].d = angolo+math.pi
-                            #veicle[id1].v = v1
-                            #veicle[id2].v = v2
-                            impatto = math.sqrt((vx1-vx2)**2+(vy1-vy2)**2)*(m1+m2)
-                            #print(impatto/20*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage)
-                            veicle[id1].vx = vfx1
-                            veicle[id2].vx = vfx2
-                            veicle[id1].vy = vfy1
-                            veicle[id2].vy = vfy2
-                            #veicle[id1].xforce = - veicle[id1].xforce
-                            #veicle[id2].xforce = - veicle[id2].xforce
-                            #veicle[id1].yforce = - veicle[id1].yforce
-                            #veicle[id2].yforce = - veicle[id2].yforce
-                            veicle[id1].velocita_angolare = 0
-                            veicle[id2].velocita_angolare = 0
-                            veicle[id1].block[ii].life -= impatto/20*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage
-                            veicle[id2].block[i].life -= impatto/20*veicle[id1].block[ii].impact_damage+0.1+veicle[id1].block[ii].damage
-                            veicle[id1].xforce = 0
-                            veicle[id1].yforce = 0
-                            veicle[id2].xforce = 0
-                            veicle[id2].yforce = 0
-                            if veicle[id1].block[ii].life <= 0:
-                                if veicle[id1].block[ii].r==3:
-                                    veicle[id1].sail -= 1
-                                    veicle[id1].torsion_force = 0
-                            if veicle[id2].block[i].life <= 0:
-                               if veicle[id2].block[i].r==3:
-                                    veicle[id2].sail -= 1
-                                    veicle[id2].torsion_force = 0
-
-
+    global numero_mass
+    xx=veicle[id1].x
+    yy=veicle[id1].y
+    g=id2
+    angle=veicle[id1].angle
+    size=veicle[id1].r
+    for ii in range(veicle[id1].DNA[0]):
+        if veicle[id1].block[ii].life > 0:
+            pos1x = xx + math.sin(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.sin(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
+            pos1y = yy + math.cos(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.cos(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
+            for i in range(veicle[g].DNA[0]):
+                if veicle[id2].block[i].life > 0:
+                    pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]
+                    pos2y = veicle[g].y + math.cos(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.cos(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]
+                    if dist(pos1x,pos1y,pos2x,pos2y) <= size * 15 * veicle[id1].block[ii].r + veicle[g].r * 15 * veicle[id2].block[i].r :
+                        #if veicle[id1].block[ii]==sail_1 or veicle[id1].block[ii]==sail_2 or veicle[id1].block[ii]==sail_3 or veicle[id1].block[ii]==sail_4:
+                        m1 = veicle[id1].mass
+                        m2 = veicle[id2].mass
+                        vx1 = veicle[id1].vx
+                        vx2 = veicle[id2].vx
+                        vy1 = veicle[id1].vy
+                        vy2 = veicle[id2].vy
+                        r1 = math.sqrt((pos1x - xx) ** 2 + (pos1y - yy) ** 2)
+                        r2 = math.sqrt((pos2x - veicle[g].x) ** 2 + (pos2y - veicle[g].y) ** 2)
+                        w1 = veicle[id1].velocita_angolare
+                        w2 = veicle[id2].velocita_angolare
+                        a1 = veicle[id1].angle
+                        a2 = veicle[id2].angle
+                        vtx1 = vx1 + w1 * r1 * math.sin(a1)
+                        vtx2 = vx2 + w2 * r2 * math.sin(a2)
+                        vty1 = vy1 + w1 * r1 * math.cos(a1)
+                        vty2 = vy2 + w2 * r2 * math.cos(a2)
+                        vfx1 = (m1 - m2) * vtx1 / (m1 + m2) + 2 * m2 * vtx2 / (m1 + m2)
+                        vfx2 = (m1 - m2) * vtx2 / (m1 + m2) + 2 * m2 * vtx1 / (m1 + m2)
+                        vfy1 = (m1 - m2) * vty1 / (m1 + m2) + 2 * m2 * vty2 / (m1 + m2)
+                        vfy2 = (m1 - m2) * vty2 / (m1 + m2) + 2 * m2 * vty1 / (m1 + m2)
+                        #velocita_inpattox=vx1+w1*r1*math.sin(a1)-(vx2+w2*r2*math.sin(a2))
+                        #velocita_inpattoy = vy1 + w1 * r1 * math.cos(a1) - (vy2 + w2 * r2 * math.cos(a2))
+                        #Ti=m1*v1 + r1*m1*w1 + m2*v2 + r2*m2*w2
+                        #Ei=0.5*m1*r1**2*w1**2+0.5*m1*v1**2+0.5*m2*r2**2*w2**2+0.5*m2*v2**2
+                        #delta=4*Ti**2*m2**2-4*(m2**2+m1*m2)*(Ti**2-2*Ei*m1)
+                        #if delta < 0:
+                            #delta = -delta
+                        #v2=2*Ti*m2/(2*m2**2+2*m1*m2)
+                        #v1=(Ti-m2*v2)/m1
+                        #print(v2)
+                        #angolo=math.atan2(yy-veicle[g].y,xx-veicle[g].x)
+                        #veicle[id1].d = angolo
+                        #veicle[id2].d = angolo+math.pi
+                        #veicle[id1].v = v1
+                        #veicle[id2].v = v2
+                        impatto = math.sqrt((vx1-vx2)**2+(vy1-vy2)**2)*(m1+m2)
+                        #print(impatto/20*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage)
+                        veicle[id1].vx = vfx1
+                        veicle[id2].vx = vfx2
+                        veicle[id1].vy = vfy1
+                        veicle[id2].vy = vfy2
+                        #veicle[id1].xforce = - veicle[id1].xforce
+                        #veicle[id2].xforce = - veicle[id2].xforce
+                        #veicle[id1].yforce = - veicle[id1].yforce
+                        #veicle[id2].yforce = - veicle[id2].yforce
+                        # veicle[id1].velocita_angolare = 0
+                        veicle[id2].velocita_angolare = 0
+                        veicle[id1].block[ii].life -= impatto/40*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage
+                        veicle[id2].block[i].life -= impatto/40*veicle[id1].block[ii].impact_damage+0.1+veicle[id1].block[ii].damage
+                        veicle[id1].xforce = 0
+                        veicle[id1].yforce = 0
+                        veicle[id2].xforce = 0
+                        veicle[id2].yforce = 0
+                        if veicle[id1].block[ii].life <= 0:
+                            mass.append(Mass(pos1x,pos1y,veicle[id1].block[ii].mass*1000*veicle[id1].r))
+                            numero_mass += 1
+                            if veicle[id1].block[ii].r==3:
+                                veicle[id1].sail -= 1
+                                veicle[id1].torsion_force = 0
+                        if veicle[id2].block[i].life <= 0:
+                            mass.append(Mass(pos2x, pos2y, veicle[id2].block[i].mass*1000*veicle[id2].r))
+                            numero_mass += 1
+                            if veicle[id2].block[i].r==3:
+                                veicle[id2].sail -= 1
+                                veicle[id2].torsion_force = 0
 
 
 def accensione():
@@ -918,6 +974,7 @@ def inizializza():
     veicle = []
     for i in range(numero_veicle):
         new_veicle(int(veicle_info[i][0]), int(veicle_info[i][1]), float(veicle_info[i][2]), int(veicle_info[i][3]), veicle_info[i][4])
+    mass = []
 
 
 def load():
@@ -954,7 +1011,7 @@ def save():
 
 
 def simulation():
-    global timer,numero_veicle,timer_ottimizazzione,stagione,stato_stagione
+    global timer,numero_veicle,timer_ottimizazzione,numero_mass
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -967,21 +1024,31 @@ def simulation():
             else:
                 grafica = True
                 SCHERMO = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    print(numero_mass)
+    for i in range(numero_mass):
+        mass[i].move(i)
     for i in range(numero_veicle):
         veicle[i].move()
         veicle[i].see(i)
         id = veicle[i].id_collision_detection
         if not id >= numero_veicle:
-            if id != 1000000 and not veicle[id].collision_detection:
-                veicle[i].collision_detection = True
-                collision_detection(i,id)
+            if veicle[i].move_check:
+                if id != 1000000 and not veicle[id].collision_detection:
+                    veicle[i].collision_detection = True
+                    collision_detection(i,id)
     for i in range(numero_veicle):
         if veicle[i].life <= 0:
             numero_veicle -= 1
     for i in range(numero_veicle):
-        veicle[i].collision_detection = False
-        if veicle[i].life == 0:
+        #veicle[i].collision_detection = False
+        if veicle[i].life <= 0:
             delete_veicle(i)
+    for i in range(numero_mass):
+        if mass[i].mass <= 0:
+            numero_mass -= 1
+    for i in range(numero_mass):
+        if mass[i].mass <= 0:
+            delete_mass(i)
 
     timer += 1 * velocita
 #    timer_ottimizazzione += 1 * velocita
@@ -1042,7 +1109,10 @@ def show_simulation():
         if Mx > j - 100 and My < 100:
             save()
     for i in range(numero_veicle):
-        veicle[i].show()
+        veicle[i].show(i)
+        veicle[i].collision_detection = False
+    for i in range(numero_mass):
+        mass[i].show()
     show_bordi()
     # cursore velocità
     pygame.draw.line(SCHERMO, 100, (150, 50), (350, 50), 10)
