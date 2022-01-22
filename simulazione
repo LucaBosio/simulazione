@@ -33,7 +33,7 @@ def dist(p1x, p1y, p2x, p2y):
     return dist
 
 
-class Mass:
+class Mass:   #questa classe inizializza le proprietà "meccaniche"/visive
     def __init__(self,xx,yy,mass):
         self.x = xx
         self.y = yy
@@ -47,19 +47,19 @@ class Mass:
 
     def show(self):
         j, k = SCHERMO.get_size()
-        X = (self.x + x) * zoom + j / 2
-        Y = (self.y + y) * zoom + k / 2
-        pygame.draw.circle(SCHERMO, (200, 0, 0), (X, Y), zoom *15 *self.mass/1000, 0)
+        X = (self.x + x) * zoom + j / 2    #x è inizializzata prima, j è la larghezza
+        Y = (self.y + y) * zoom + k / 2    #y idem, k è l'altezza
+        pygame.draw.circle(SCHERMO, (200, 0, 0), (X, Y), zoom *15 *self.mass/1000, 0) #superficie, colore RGB, centro, raggio, spessore linea
         if zoom > 0.4:
             pygame.draw.circle(SCHERMO, (100, 0, 0), (X, Y), zoom * 15*self.mass/1000, int(zoom*2*self.mass/1000))
             pygame.draw.circle(SCHERMO, (150, 0, 0), (X, Y), zoom * 10*self.mass/1000, 0)
 
 
 class nucleus:
-    def __init__(self,xx,yy):
+    def __init__(self,xx,yy): ''' c'è  da spiegare cosa significano i singoli parametri'''
         self.x = xx
         self.y = yy
-        self.battito = 7
+        self.battito = 7     
         self.life = 1
         self.r = 1
         self.impact_damage=1
@@ -72,7 +72,7 @@ class nucleus:
 
 
     def draw(self, surface, rect, size, angle, width, cosox, cosoy):
-        self.battito += 0.3
+        self.battito += 0.3   
         if self.battito > 10:
             self.battito = 5
         target_rect = pygame.Rect(rect)
@@ -89,7 +89,7 @@ class nucleus:
         surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
 
 
-class repulsion:
+class repulsion: '''repulsion e nucleus potrebbero essere sottoclassi? '''
     def __init__(self,xx,yy):
         self.life = 1
         self.x = xx
@@ -589,9 +589,9 @@ class sail_4:
             surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
 
 
-class Veicle:
+class Veicle: #prima roba nuova in 300/400 righe, si delineano le proprietà "biologiche" dell'oggetto
     def __init__(self, xp, yp, r, xforce, yforce, DNA):
-        self.age = r*100
+        self.age = r*100     #il controllo dell'oggetto è ogni 100 frame
         self.x = xp
         self.y = yp
         self.r = (r + random.randint(-100, 100)) / 1000 + 1
@@ -609,7 +609,7 @@ class Veicle:
         self.spawn_range = 1000
         self.sail = 0
         self.block = []
-        for i in range(DNA[0]):
+        for i in range(DNA[0]):    #DNA come è strutturato?
             if DNA[i * 3 + 3] == 0:
                 self.block.append(nucleus(DNA[i*3+1], DNA[i*3+2]))
             if DNA[i * 3 + 3] == 1:
