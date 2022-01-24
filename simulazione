@@ -16,14 +16,14 @@ FONT2 = pygame.font.SysFont('Comic Sans MS', 10, bold=True) #carico il font per 
 timer = 0 #tempo da cui sta andando la simulazione
 grafica = False #dice se il programma deve stampare a video o no
 zoom = 1.0 #serve per zoommare
-velocita = 1 #velocità della simulazione
+velocita = 1 #velocità della simulazione (al massimo arriva a 8x)
 cursore_velocita = 1 #sia per stampare a video il cursore per scegliere la velocità sia per certi calcoli
 x = 0 #posizione x di dove stai guardando
 y = 0 #posizione y di dove stai guardando
-map_x_size = 100000 #dimensioni mappa
+map_x_size = 100000 #dimensioni mappa (rispetto alla scorsa simulazione è 10x10 volte più grande)
 map_y_size = 100000
-numero_veicle = 0
-numero_mass = 0 #numero di blocchetti massa
+numero_veicle = 0 #numro dei veicoli (esserini) che verrà aggiunto più tardi in randomizazzione o in load
+numero_mass = 0 #numero di blocchetti massa totali
 press_timer = 0 #serve per premere certi tasti che per ora non ci sono, (viene dalle vecchie simulazioni dove potevi schiacciare su un esserino e seguirlo)
 mass = []
 mille = 0 #un timer che ogni 100 frame attiva la modalita visiva per ottimizzare l'elaborazione, (ce un probelma che col passare del tempo i frame rallentano in modalità ottimizzata)
@@ -32,9 +32,9 @@ massa_nel_sistema = 0 #massa totale del sistema calcolata
 numero_leaf = 0 #numero totale delle foglie nel sistema
 numero_mouth = 0 #numero totale delle bocche nel sistema
 massa_per_oggetto = 0 #massa che le piante e le bocche assorbono per unità
-timer_ottimizazzione = 0 #un timer che ogni 100 frame si attiva
-differenza_massa = 0 #serve per rendere la massa stabile nel sistema
-massa_nel_sistema1 = 0 #massa data inizialmente nel sistema (viene data su randomizazzione
+timer_ottimizazzione = 0 #un timer che ogni 100 frame si attiva, non ricordo perchè ci sia anche mille come timer, forse possiamo usarene solo uno dei 2
+differenza_massa = 0 #serve per rendere la massa stabile nel sistema, viene da massa iniziale-massa attuale
+massa_nel_sistema1 = 0 #massa data inizialmente nel sistema (viene data su randomizazzione o su load)
 
 
 def dist(p1x, p1y, p2x, p2y):
@@ -61,9 +61,9 @@ class Mass:   #questa classe inizializza le proprietà "meccaniche"/visive, emm 
         X = (self.x + x) * zoom + j / 2 #calcola le coordinate di dove stampare a schermo
         Y = (self.y + y) * zoom + k / 2
         pygame.draw.circle(SCHERMO, (200, 0, 0), (X, Y), zoom *15 *self.mass/1000, 0) #superficie, colore RGB, centro, raggio, spessore linea
-        if zoom > 0.4: #ottimizza la parte grafica, i dettagli si vedono solo quando zommi
+        if zoom > 0.4: #ottimizza la parte grafica, i dettagli si vedono solo quando ti avvicini
             pygame.draw.circle(SCHERMO, (100, 0, 0), (X, Y), zoom * 15*self.mass/1000, int(zoom*2*self.mass/1000))
-            pygame.draw.circle(SCHERMO, (150, 0, 0), (X, Y), zoom * 10*self.mass/1000, 0) #il raggio è da sistemare, sarebbe da fare che sia la radice della massa
+            pygame.draw.circle(SCHERMO, (150, 0, 0), (X, Y), zoom * 10*self.mass/1000, 0) #il raggio è da sistemare, sarebbe da fare che sia la radice della massa perchè per ora a volte si generano masse davvero grandi se vengono da esserini grandi e da blocchetti con tanta massa tipo shell
 
 
 class nucleus: #parte centrale dell'esserino, se manca, muore
@@ -75,19 +75,19 @@ class nucleus: #parte centrale dell'esserino, se manca, muore
         self.r = 1 #area occupata dall blocchetto
         self.impact_damage=1 #danno dato nell'urto
         self.damage=0 #danno che non è di impatto (esempio veleno o morso)
-        self.mass = 1 #qunato pesa il blocchetto
+        self.mass = 1 #qunato pesa il blocchetto di base
         self.energy = -1 #quanta energia consuma, ovviamente valori positvi la producono
         self.max_life = 1 #vita massima che può avere
         self.rigeneration_timer = 0 #quando arriva a 1000 il blocchetto inizia a rigenerarsi
 
 
     def draw(self, surface, rect, size, angle, width, cosox, cosoy):
-        self.battito += 0.3
+        self.battito += 0.3 #animazione del cuore che batte
         if self.battito > 10:
             self.battito = 5
-        target_rect = pygame.Rect(rect)
-        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
-        pygame.draw.polygon(shape_surf, (200,0,0), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], width)
+        target_rect = pygame.Rect(rect) #dice quanto è grande l'elemento target_rect
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA) #crea una base su cui disegnare (un quadrato di 15*zoom*size pixel per lato)
+        pygame.draw.polygon(shape_surf, (200,0,0), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], width) #disegna su shape_surf
         if zoom>0.4:
             pygame.draw.polygon(shape_surf, (100,0,0), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], int(5*zoom*size))
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 5*zoom * size), (15*zoom * size, zoom * size * 12), (zoom * size * 25, zoom * 5 * size)], 0)
@@ -95,8 +95,8 @@ class nucleus: #parte centrale dell'esserino, se manca, muore
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 25*zoom * size), (15*zoom * size, zoom * size * 18), (zoom * size * 25, zoom * 25 * size)], 0)
             pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 5*zoom * size), (12*zoom * size, zoom * size * 15), (zoom * size * 5, zoom * 25 * size)], 0)
             pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito * size, 0)
-        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
-        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi) #ruota shape_surf
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y))) #stampa a video shape_surf
 
 
 class repulsion: #ancora non funziona ma quando attivo genera un inpulso che scaccia i proiettili e gli oggetti con bassa massa
@@ -337,7 +337,7 @@ class shell: #semplicemente come uno scuto è molto resistente
         surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
 
 
-class sensor: #avrà degli input da dare alla AI
+class sensor: #avrà degli input da dare alla AI, secondo me si può fare che non deve per foza essere attacato a un altro blocchetto, ma a una certa distanza
     def __init__(self,xx,yy):
         self.life = 1
         self.x = xx
@@ -460,7 +460,7 @@ class spike_4:
         surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
 
 
-class sail_1:
+class sail_1: #genera delle forze per simulare le correnti
     def __init__(self,xx,yy):
         self.life = 2
         self.x = xx
@@ -586,7 +586,7 @@ class sail_4:
             surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
 
 
-class stomach:
+class stomach: #mette da parte lenergia non utilizzata
     def __init__(self,xx,yy):
         self.life = 3
         self.x = xx
@@ -615,12 +615,12 @@ class stomach:
 
 class Veicle:
     def __init__(self, xp, yp, r, xforce, yforce, DNA):
-        self.age = r*100 #età che ha il veicolo, se supera una soglia muore di vecchiaia, ora si basa su r che sarebbe un parametro che ne determina la dimensione in modo che a inizio simulazione non muoiono tutti assieme dopo un tot di tempo
+        self.age = r*100 #età che ha il veicolo, se supera una soglia muore di vecchiaia, ora si basa su r che sarebbe un parametro che ne determina la dimensione in modo che a inizio simulazione non muoiono tutti assieme dopo un tot di tempo, dovrà essere modifiacato
         self.x = xp
         self.y = yp
         self.r = (r + random.randint(-100, 100)) / 1000 + 1 #possiamo dire che determina le dimensioni del veicolo, r sta per raggio (ancora da quando nella simulazione i veicle erano dei cerchi)
         self.vx = 0 #velocità sull'asse x
-        self.vy = 0 #velocità sull'asse x
+        self.vy = 0 #velocità sull'asse y
         self.v = 0 #velocità
         self.life = 1 #semplicemente un valore che non deve essere 0, altrimenti vuol dire che il veicle è morto
         self.xforce = xforce #forza applicata sull'asse x
@@ -713,9 +713,9 @@ class Veicle:
                         self.block[i].life = self.block[i].max_life
                         self.block[i].rigeneration_timer = 0 #resetta il timer per una futura rigenerazione
                         if self.block[i].r == 3: #se il blocchetto rigenerato è una vela
-                            self.sail += 1 #rimette il numero di vele a posto
+                            self.sail += 1 #rimette il numero di vele a posto, viene messo a 0 nella funzione collisione
         self.age += velocita #invecchia
-        self.mass = self.weight*self.r*self.r #la massa cresce 
+        self.mass = self.weight*self.r*self.r #la massa cresce in base al raggio
         for i in range(self.DNA[0]):
             if self.block[i].life > 0:
                 somma = somma + self.block[i].energy*velocita #controlla il consumo di energia
@@ -745,7 +745,7 @@ class Veicle:
             self.vx = 0
         if self.vy < 0.05 and self.vy > -0.05:
             self.vy = 0
-        #self.d = math.atan2(self.yforce, self.xforce)
+        #self.d = math.atan2(self.yforce, self.xforce) #roba vecchia e sbagliaa
         self.x = self.x + self.vx * velocita
         self.y = self.y + self.vy * velocita
         if self.vx > 100 or self.vx < -100: #a volte per a formula self.vx = self.vx + (self.ax - 0.01*math.sqrt(self.vx ** 2)*self.vx) * velocita, vx diventa troppo grande e da errore, è da sistemare, per ora il veicolo semplicemente muore
@@ -783,10 +783,10 @@ class Veicle:
 
 
     def see(self,id):
-        if self.move_check or self.collision_detection:
+        if self.move_check or self.collision_detection: #si attiva solo se si muove, se un altro veicle gli dice che stanno collidendo e il primo frame di vita
             self.timer_ottimizazzione += 1
-            self.see_veicle(id)
-            self.see_bordi()
+            self.see_veicle(id) #vede gli altri veicle
+            self.see_bordi() #non sbatte contro i bordi
             if self.timer_ottimizazzione >= 100:
                 self.timer_ottimizazzione = 0
 
@@ -802,7 +802,7 @@ class Veicle:
                     if distanza < (100 * velocita * self.max_speed + 500):
                         self.numero_veicle_vicini += 1
                         self.veicle_vicini.append(i)
-        distanza_veicle_piu_vicino = 400
+        distanza_veicle_piu_vicino = 400 #per ora ho messo 400 che sabbe la distanza massima di collisione tra i vecle sapendo che sono tutti uguali, in futuro si deve basare su quanto è grande il veicle più grande della simulazione
         g = 1000000
         for i in range(self.numero_veicle_vicini): #ogni frame controlla solo gli elementi vicini
             g = self.veicle_vicini[i]
@@ -812,7 +812,7 @@ class Veicle:
                     if distanza < distanza_veicle_piu_vicino:
                         #pianta_piu_vicina = g
                         distanza_veicle_piu_vicino = distanza
-                        #if distanza_pianta_piu_vicina < 200*self.sense:
+                        #if distanza_pianta_piu_vicina < 200*self.sense: #robe vecchie
                             #self.d = self.d + (math.atan2(veicle[pianta_piu_vicina].y - self.y, veicle[pianta_piu_vicina].x - self.x) - self.d)
                         if distanza_veicle_piu_vicino < 400:
                             self.id_collision_detection = g
@@ -824,7 +824,7 @@ class Veicle:
 
     def see_bordi(self):
         if self.x > map_x_size/2:
-            self.vx = -self.vx
+            self.vx = -self.vx #inverte la velocità (rimbalza), sarebbe da fare che cambia direzione perchè sennò continua a sbattere
             self.x = self.x + self.vx * velocita
             self.torsion_force = 0
             self.xforce = 0
@@ -847,7 +847,7 @@ class Veicle:
             self.torsion_force = 0
             self.yforce = 0
             self.ay = 0
-        if self.x > map_x_size/2+10:
+        if self.x > map_x_size/2+10: #se esce dai bordi muore
             self.life = 0
         if self.y > map_y_size/2+10:
             self.life = 0
@@ -857,22 +857,22 @@ class Veicle:
             self.life = 0
 
     def show(self,id):
-        if zoom > 0.01 :
+        if zoom > 0.01 : #in futuro è da abbassare
             j, k = SCHERMO.get_size()
             X = (self.x + x) * zoom + j / 2
             Y = (self.y + y) * zoom + k / 2
             if X>0 and Y>0 and X<j and Y < k:
                 if self.collision_detection:
-                    pygame.draw.circle(SCHERMO, (255, 0, 0), (X, Y), zoom*(400), 2)
+                    pygame.draw.circle(SCHERMO, (255, 0, 0), (X, Y), zoom*(400), 2) #diventa rosso quando avviene un impatto
                 else:
-                    pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom * (400), 2)
+                    pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom * (400), 2) #verde altrimenti
                 #pygame.draw.circle(SCHERMO, (0, 155, 0), (X, Y), 2 * zoom * 50, 0)
                 for i in range(self.DNA[0]):
-                    #if self.DNA[i*3+3] == 12:
+                    #if self.DNA[i*3+3] == 12: #roba strana 
                         #pygame.draw.line(SCHERMO, (150, 150, 150), (X, Y), (X + math.sin(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.sin(self.angle + math.pi / 2) * zoom * self.r * 30 * self.DNA[i*3+2],Y + math.cos(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.cos(self.angle + math.pi / 2) * zoom * self.r * 30 *self.DNA[i*3+2]), int(5 * zoom * self.r))
                     if self.block[i].life>0:
                         self.block[i].draw(SCHERMO, [0, 0, zoom*self.r*30, zoom*self.r*30], self.r, self.angle, 0, X, Y)
-                #A = FONT1.render(str(self.id_collision_detection), True, (0, 0, 0))
+                #A = FONT1.render(str(self.id_collision_detection), True, (0, 0, 0)) #dati utili da stampare a video per fare le varie prove
                 #SCHERMO.blit(A, (X, Y-45))
                 #B = FONT1.render(str(id), True, (0, 0, 0))
                 #SCHERMO.blit(B, (X, Y-30))
@@ -888,7 +888,7 @@ class Veicle:
                 #SCHERMO.blit(numero, (X, Y))
 
 
-def show_bordi():
+def show_bordi(): #disegna i bordi in modo efficente
     j, k = SCHERMO.get_size()
     if x > map_x_size/2-j/(2*zoom):
         pygame.draw.rect(SCHERMO,(100,100,100),(0,0,int((-map_x_size/2 + x) * zoom + j / 2),k))
@@ -902,15 +902,15 @@ def show_bordi():
 
 def delete_veicle(ii):
     global numero_veicle,numero_mass,mass
-    for i in range(veicle[ii].DNA[0]):
+    for i in range(veicle[ii].DNA[0]): #per ogni blocchetto morto genera una quantità di massa proporzionale alla massa del blocchetto
         if veicle[ii].block[i].life>0:
             mass.append(Mass(veicle[ii].x, veicle[ii].y, veicle[ii].block[i].mass * 1000 * veicle[ii].r * veicle[ii].r))
             numero_mass += 1
-    veicle[ii]=veicle[numero_veicle - 1]
-    veicle.pop(numero_veicle - 1)
+    veicle[ii]=veicle[numero_veicle - 1] #sostituisce il veicle morto con lultimo veicle dell ì'array
+    veicle.pop(numero_veicle - 1) #elimina l'ultimo elemanto dell'array, non ricordo perchè ma questa operazione mi evitava problemi
 
 
-def delete_mass(i):
+def delete_mass(i): #elimina la massa dal sistema
     mass[i]=mass[numero_mass - 1]
     mass.pop(numero_mass - 1)
 
@@ -930,13 +930,13 @@ def collision_detection(id1,id2):
     size=veicle[id1].r
     for ii in range(veicle[id1].DNA[0]):
         if veicle[id1].block[ii].life > 0:
-            pos1x = xx + math.sin(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.sin(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
+            pos1x = xx + math.sin(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.sin(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2] #posizione esatta del impatto calcolata con le coordinate del blocchetto che rileva la collisione rispetto al veicle 1 
             pos1y = yy + math.cos(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.cos(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
             for i in range(veicle[g].DNA[0]):
                 if veicle[id2].block[i].life > 0:
-                    pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]
+                    pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]#posizione esatta del impatto calcolata con le coordinate del blocchetto che rileva la collisione rispetto al veicle 2
                     pos2y = veicle[g].y + math.cos(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.cos(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]
-                    if dist(pos1x,pos1y,pos2x,pos2y) <= size * 15 * veicle[id1].block[ii].r + veicle[g].r * 15 * veicle[id2].block[i].r :
+                    if dist(pos1x,pos1y,pos2x,pos2y) <= size * 15 * veicle[id1].block[ii].r + veicle[g].r * 15 * veicle[id2].block[i].r : #verifica se i 2 esserini si stanno collidendo
                         #if veicle[id1].block[ii]==sail_1 or veicle[id1].block[ii]==sail_2 or veicle[id1].block[ii]==sail_3 or veicle[id1].block[ii]==sail_4:
                         m1 = veicle[id1].mass
                         m2 = veicle[id2].mass
@@ -973,7 +973,7 @@ def collision_detection(id1,id2):
                         #veicle[id2].d = angolo+math.pi
                         #veicle[id1].v = v1
                         #veicle[id2].v = v2
-                        impatto = math.sqrt((vx1-vx2)**2+(vy1-vy2)**2)*(m1+m2)
+                        impatto = math.sqrt((vx1-vx2)**2+(vy1-vy2)**2)*(m1+m2) #calcola la forza del impatto
                         #print(impatto/20*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage)
                         veicle[id1].vx = vfx1
                         veicle[id2].vx = vfx2
@@ -983,19 +983,19 @@ def collision_detection(id1,id2):
                         #veicle[id2].xforce = - veicle[id2].xforce
                         #veicle[id1].yforce = - veicle[id1].yforce
                         #veicle[id2].yforce = - veicle[id2].yforce
-                        # veicle[id1].velocita_angolare = 0
+                        veicle[id1].velocita_angolare = 0 #trasferisce tutta la velocità di rotazione in velocuìità di movimento
                         veicle[id2].velocita_angolare = 0
-                        veicle[id1].block[ii].life -= impatto/40*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage
+                        veicle[id1].block[ii].life -= impatto/40*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage #vengono danneggiati i blocchetti seuendo i vari fattori, come impatto,massa, danno di impatto e danno del blocchetto
                         veicle[id2].block[i].life -= impatto/40*veicle[id1].block[ii].impact_damage+0.1+veicle[id1].block[ii].damage
                         veicle[id1].xforce = 0
                         veicle[id1].yforce = 0
                         veicle[id2].xforce = 0
                         veicle[id2].yforce = 0
                         if veicle[id1].block[ii].life <= 0:
-                            mass.append(Mass(pos1x,pos1y,veicle[id1].block[ii].mass*1000*veicle[id1].r*veicle[id1].r))
+                            mass.append(Mass(pos1x,pos1y,veicle[id1].block[ii].mass*1000*veicle[id1].r*veicle[id1].r)) #genera una massa dove è stato perso un blocchetto, ce un problema però, la massa viene creata svariati frame dopo l'impatto, cosa assolutamente da sistemare
                             numero_mass += 1
-                            if veicle[id1].block[ii].r==3:
-                                veicle[id1].sail -= 1
+                            if veicle[id1].block[ii].r==3: #verifica che il blocchetto perso sia una vela
+                                veicle[id1].sail -= 1 
                                 veicle[id1].torsion_force = 0
                         if veicle[id2].block[i].life <= 0:
                             mass.append(Mass(pos2x, pos2y, veicle[id2].block[i].mass*1000*veicle[id2].r*veicle[id2].r))
@@ -1005,54 +1005,54 @@ def collision_detection(id1,id2):
                                 veicle[id2].torsion_force = 0
 
 
-def accensione():
+def accensione(): #avvio della simulazione, ci sono 2 tasti che ti fanno scegliere se avvaire una nuova simulazione (verde a sinistra) o caricarne una gia fatta (arancione a destra[non funziona per ora])
     SCHERMO = pygame.display.set_mode((400, 200))
     while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
+        for event in pygame.event.get(): #se succede un evento, esempio il mouse viene premuto
+            if event.type == pygame.QUIT: #e se viene premuta la x per uscire dal programma
+                pygame.quit() #pygame si chiude
                 sys.exit()
         SCHERMO.fill((255, 255, 255))
         pygame.draw.circle(SCHERMO, (50, 200, 100), (100, 100), 100, 0)
         pygame.draw.circle(SCHERMO, (255, 100, 50), (300, 100), 100, 0)
-        Mx, My = pygame.mouse.get_pos()
+        Mx, My = pygame.mouse.get_pos() #controlla la posizione del mouse
         if pygame.mouse.get_pressed()[0]:
-            if Mx < 200 and My < 200:
-                randomizazzione()
-                inizializza()
+            if Mx < 200 and My < 200: #se il mouse viene premuto ed è nel primo cerchio
+                randomizazzione() #avvia randomizazzione, una funzione che genera tutti i dati della simulazione in modo random
+                inizializza() #trasforma i dati di randomizazzione in dati leggibili alla simulazione
                 break
             if Mx > 200 and My < 200:
-                load()
-                inizializza()
+                load() #carica i dati dai file salvati
+                inizializza() #trasforma questi dati in dati leggibili dalla simulazione
                 break
         pygame.display.flip()
-        clock.tick(50)
+        clock.tick(50) #questa schermata si aggiorna a 50 FPS frame per second
 
 
 def randomizazzione():
     global veicle_info
     global numero_veicle
-    numero_veicle = 900
+    numero_veicle = 900 #ora è fisso a 900, ricordo che per ora dentro a veicle ce una funzione che impedisce di riprodursi quando ci sono 1000 veicle
     veicle_info = []
-    DNA = [14,0,0,0,1,0,5,-1,0,17,0,1,2,0,-1,2,0,2,1,0,3,1,0,-2,1,0,-3,1,-1,1,7,-1,-1,7,1,1,12,1,-1,12,-3,0,13]
-    for i in range(numero_veicle):
+    DNA = [14,0,0,0,1,0,5,-1,0,17,0,1,2,0,-1,2,0,2,1,0,3,1,0,-2,1,0,-3,1,-1,1,7,-1,-1,7,1,1,12,1,-1,12,-3,0,13] #DNA fatto a mano da me per creare un veicle sensato
+    for i in range(numero_veicle): #genera le info per i veicle che per ora sono solo i DNA dei blocchetti, in futuro saranno molte più info
         veicle_info.append([random.randint(int(-map_x_size / 2), int(map_x_size / 2)), random.randint(int(-map_y_size / 2), int(map_y_size / 2)), random.randint(0, 1000),0,DNA])
 
 
-def inizializza():
+def inizializza(): #prende tutte le info e avvia la simulazione
     global numero_veicle
     global veicle
     global veicle_info,massa_nel_sistema,massa_nel_sistema1
     veicle = []
     for i in range(numero_veicle):
-        new_veicle(int(veicle_info[i][0]), int(veicle_info[i][1]), float(veicle_info[i][2]), int(veicle_info[i][3]), veicle_info[i][4])
+        new_veicle(int(veicle_info[i][0]), int(veicle_info[i][1]), float(veicle_info[i][2]), int(veicle_info[i][3]), veicle_info[i][4]) #crea nuovi veicle
         for ii in range(veicle[i].DNA[0]):
-            massa_nel_sistema1 += veicle[i].block[ii].mass*1000*veicle[i].r*veicle[i].r
+            massa_nel_sistema1 += veicle[i].block[ii].mass*1000*veicle[i].r*veicle[i].r #calcola la massa iniziale del sistema, che poi dovrà essere costante
     massa_nel_sistema = massa_nel_sistema1
     mass = []
 
 
-def load():
+def load(): #qua è tutto da sistemare, penso che il funzionamento si capisca ma mancano  olti dati essenziali da salvare e caricare
     global veicle_info
     global numero_veicle
     global timer
@@ -1071,7 +1071,7 @@ def load():
                 timer = int(riga[0])
 
 
-def save():
+def save(): #si attiva schiacciando un pulsante in alto a sinistra, crea dei file csv con i dati dentro
     caratteristiche_mappa = []
     caratteristiche_mappa.append([int(timer), 0, 0, 0, 0, 0])
     with open("caratteristiche mappa.csv", "w") as f:
@@ -1085,13 +1085,13 @@ def save():
         writer.writerows(m)
 
 
-def simulation():
+def simulation(): #parte principale, va sempre, anche quando la simulzione non è visualizzata, qiesta funzione viene chiamata a ogni frame quindi essenziale che sia efficente
     global timer,numero_veicle,timer_ottimizazzione,numero_mass,mille,grafica,massa_libera_nel_sistema,numero_mouth,numero_leaf,massa_per_oggetto,massa_nel_sistema,massa_nel_sistema1,differenza_massa
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: #se schiacci spazio visualizzi o meno la simulazione
             if grafica:
                 grafica = False
                 SCHERMO = pygame.display.set_mode((200, 200))
@@ -1109,19 +1109,19 @@ def simulation():
             numero_leaf += veicle[i].numero_leaf
             numero_mouth += veicle[i].numero_mouth
         if (numero_leaf+numero_mouth*2)>0:
-            massa_per_oggetto = massa_libera_nel_sistema / (numero_leaf + numero_mouth * 2)
-            massa_libera_nel_sistema = 0
+            massa_per_oggetto = massa_libera_nel_sistema / (numero_leaf + numero_mouth * 2) #calcola la massa assorbita per oggetto
+            massa_libera_nel_sistema = 0 #se la massa viene assorbita la massa libera che rimane è 0
         for i in range(numero_veicle):
-            veicle[i].r += (massa_per_oggetto * veicle[i].numero_leaf + massa_per_oggetto * veicle[i].numero_mouth * 2) / (1000 * veicle[i].r * veicle[i].weight)
+            veicle[i].r += (massa_per_oggetto * veicle[i].numero_leaf + massa_per_oggetto * veicle[i].numero_mouth * 2) / (1000 * veicle[i].r * veicle[i].weight) #i veicle che assorbono massa crescono
             for ii in range(veicle[i].DNA[0]):
-                massa_nel_sistema += veicle[i].block[ii].mass*veicle[i].r*veicle[i].r*1000
+                massa_nel_sistema += veicle[i].block[ii].mass*veicle[i].r*veicle[i].r*1000 #calcola la massa attuale nel sistema
         for i in range(numero_mass):
-            massa_nel_sistema += mass[i].mass
-        differenza_massa = massa_nel_sistema1 - massa_nel_sistema
+            massa_nel_sistema += mass[i].mass  #calcola la massa attuale nel sistema conatndo anche la massa nelle classi mass
+        differenza_massa = massa_nel_sistema1 - massa_nel_sistema #calcola la differenza di massa che dovrebbe esserci
         print(massa_nel_sistema1 - massa_nel_sistema)
-    massa_libera_nel_sistema += differenza_massa/200
+    massa_libera_nel_sistema += differenza_massa/200 #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
     for i in range(numero_mass):
-        mass[i].move(i)
+        mass[i].move(i) #calcola la massa, esempio il fatto che marcisca, poi ci sarebbe da mettere mass[i].see() per fare in modo che la massa veda i veicle (e non viceversa) per risparmiare ram
     #print(timer)
     #print(massa_per_oggetto)
     for i in range(numero_veicle):
@@ -1132,27 +1132,27 @@ def simulation():
         if not id >= numero_veicle:
             if veicle[i].move_check:
                 if id != 1000000 and not veicle[id].collision_detection:
-                    veicle[i].collision_detection = True
+                    veicle[i].collision_detection = True #queste righe di codice fanno in modo che l'impatto viene calcolato da uno solo dei 2 veicle coinvolti, per risparmiare ram e non sbaglaire i calcoli
                     collision_detection(i,id)
     for i in range(numero_veicle):
-        if veicle[i].life <= 0:
-            numero_veicle -= 1
+        if veicle[i].life <= 0: #se un veicle ha la vita <=0 allora viene eliminato
+            numero_veicle -= 1 #prima si toglie uno dal numero di veicle
     for i in range(numero_veicle):
         #veicle[i].collision_detection = False
         if veicle[i].life <= 0:
-            delete_veicle(i)
+            delete_veicle(i) #poi il veicle viene eliminato (questa operazione evita casini nel caso 2 veicle moiano assieme)
     for i in range(numero_mass):
-        if mass[i].mass <= 0:
+        if mass[i].mass <= 0: #uguale per la massa
             numero_mass -= 1
     for i in range(numero_mass):
         if mass[i].mass <= 0:
             delete_mass(i)
 
 
-    timer += 1 * velocita
+    timer += 1 * velocita #il tempo della simulazione viene aumentato per la velocità
 
 
-def show_grafico():
+def show_grafico(): #in futuro se attivo mostra i grafici e le varie info della simulazione
     pygame.draw.circle(SCHERMO, (255, 255, 255), (180, 150), 150, 0)
 
 
@@ -1165,11 +1165,11 @@ def show_simulation():
     press_timer += 1
     if press_timer > 10:
         press_timer = 0
-    if pygame.key.get_pressed()[pygame.K_e]:
+    if pygame.key.get_pressed()[pygame.K_e]: #con e rimpicciolisci (o il contrario non ricordo)
         zoom = zoom * 1.05
-    if pygame.key.get_pressed()[pygame.K_q]:
+    if pygame.key.get_pressed()[pygame.K_q]: #con q zoommi
         zoom = zoom * 0.95
-    if pygame.key.get_pressed()[pygame.K_w]:
+    if pygame.key.get_pressed()[pygame.K_w]: # con wasd ci si muove per la mappa, come nei videogame, w = su ,s = giu, a = destra, d = sinistra
         y += 5 / zoom
     if pygame.key.get_pressed()[pygame.K_a]:
         x += 5 / zoom
@@ -1179,7 +1179,7 @@ def show_simulation():
         x -= 5 / zoom
     Mx, My = pygame.mouse.get_pos()
     if pygame.mouse.get_pressed()[0]:
-        if Mx>150 and My<100 and Mx<200:
+        if Mx>150 and My<100 and Mx<200: #da qua rilevando la posizione del mouse sai se sta muovendo il cursore e cambiando la velocità
             velocita = 0
             cursore_velocita = 0
         if Mx>200 and My<100 and Mx<250:
@@ -1194,16 +1194,16 @@ def show_simulation():
         if Mx > 350 and My < 100 and Mx < 400:
             velocita = 8
             cursore_velocita = 4
-        if Mx < 100 and My < 100:
+        if Mx < 100 and My < 100: #un bottone in alto a sinistra che dovrebbe avvaire il grafico e le varie info
             show_grafico()
-        if Mx > j - 100 and My < 100:
+        if Mx > j - 100 and My < 100: #se premi in alto a destra salvi la simulazione
             save()
     for i in range(numero_veicle):
         veicle[i].show(i)
-        veicle[i].collision_detection = False
+        veicle[i].collision_detection = False #resetta le collision_detection  su False solo alla fine di tutto il calcolo, in questo modo vedo graficamente se si stanno collidendo o no,ma porca puttana merda ecco cosa non va, quando vado in modalità efficenza queste collisioni non vengono resettate e quindi continua a elaborarle, ecco perche rallenta dopo un po
     for i in range(numero_mass):
-        mass[i].show()
-    show_bordi()
+        mass[i].show() #fa vedere le masse presenti nella simulazione, resta da capire perchè compaiono dopo un tot
+    show_bordi() #mostra i bordi della mappa
     # cursore velocità
     pygame.draw.line(SCHERMO, 100, (150, 50), (350, 50), 10)
     pygame.draw.circle(SCHERMO, (0, 0, 255), (cursore_velocita * 50 + 150, 50), 20, 0)
@@ -1221,15 +1221,15 @@ def show_simulation():
     clock.tick(30)
 
 
-def show_base():
+def show_base(): #qui si vedono le cose base della simualzione per farla andare più veloce
     global timer
     SCHERMO.fill((155, 155, 155))
     pygame.draw.circle(SCHERMO, (255, 255, 255), (100, 100), 50, 0)
-    timer_render = FONT1.render(str(timer), True, (0, 0, 0))
+    timer_render = FONT1.render(str(timer), True, (0, 0, 0)) #in centro ce il tempo della simualzione
     SCHERMO.blit(timer_render, (70, 87))
-    num_plant_render = FONT1.render(str(numero_veicle), True, (0, 0, 0))
+    num_plant_render = FONT1.render(str(numero_veicle), True, (0, 0, 0)) #poi il numero di veicle
     SCHERMO.blit(num_plant_render, (10, 167))
-    num_mass_render = FONT1.render(str(massa_nel_sistema), True, (0, 0, 0))
+    num_mass_render = FONT1.render(str(massa_nel_sistema), True, (0, 0, 0)) #poi la massa nella simulazione
     SCHERMO.blit(num_mass_render, (110, 167))
     pygame.display.flip()
     clock.tick(500)
@@ -1248,4 +1248,4 @@ while not finished:
             show_base()
     else:
         mille = 0
-        show_simulation()
+        show_simulation() #questa grandissima stronazata serviva per ovvaire al casino spiegato in precedenza, praticamente in modalità non grafica la simulazione rallentava inspiegabilmente, in questo modo ogni 100 frame attivo la modalità grafica per sistemare questo problema, si è bruttissimo da vedere ma tempo che leggi questo mex lavrò già sistemata
