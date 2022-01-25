@@ -1,0 +1,44 @@
+graphic_point_numero_veicle = []
+graphic_Time=100
+pointTime=graphic_Time
+num_graphic_point = 0
+
+
+class Graphic_point:
+    def __init__(self,x,y,color):
+        self.num = x
+        self.x = x
+        self.y = y
+        self.color = color
+    def show(self):
+        j, k = SCHERMO.get_size()
+        X1 = self.x*(j-100)/150+100
+        Y1 = k-self.y*(k-200)/1000-100
+        X2 = graphic_point_numero_veicle[self.num - 1].x * (j - 100) / 150 + 100
+        Y2 = k - graphic_point_numero_veicle[self.num - 1].y * (k - 200) / 1000 - 100
+        pygame.draw.line(SCHERMO, self.color, (X2, Y2), (X1, Y1),5)
+        pygame.draw.circle(SCHERMO, self.color, (X1, Y1), 3, 0)
+
+
+def grafico():
+    global pointTime,graphic_Time,graphic_point_numero_veicle,num_graphic_point
+    if timer>pointTime:
+        pointTime += graphic_Time
+        graphic_point_numero_veicle.append(Graphic_point(num_graphic_point, numero_veicle, (0, 200, 0)))
+        num_graphic_point += 1
+        if num_graphic_point>150:
+            graphic_Time += graphic_Time
+            graphic_point2 = []
+            for i in range(74):
+                gigi = (graphic_point_numero_veicle[i * 2 + 1].y + graphic_point_numero_veicle[i * 2 + 2].y) / 2
+                graphic_point2.append(Graphic_point(i,gigi,(0,200,0)))
+            graphic_point_numero_veicle = []
+            for i in range(74):
+                graphic_point_numero_veicle.append(Graphic_point(i, graphic_point2[i].y, graphic_point2[i].color))
+            graphic_point2 = []
+            num_graphic_point = 74
+
+
+def show_grafico():
+    for i in range(num_graphic_point-1):
+        graphic_point_numero_veicle[i + 1].show()
