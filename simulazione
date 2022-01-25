@@ -26,15 +26,27 @@ numero_veicle = 0 #numro dei veicoli (esserini) che verrà aggiunto più tardi i
 numero_mass = 0 #numero di blocchetti massa totali
 press_timer = 0 #serve per premere certi tasti che per ora non ci sono, (viene dalle vecchie simulazioni dove potevi schiacciare su un esserino e seguirlo)
 mass = []
-mille = 0 #un timer che ogni 100 frame attiva la modalita visiva per ottimizzare l'elaborazione, (ce un probelma che col passare del tempo i frame rallentano in modalità ottimizzata)
 massa_libera_nel_sistema = 0 #massa che dalla classe pianta passa alle piante e alle bocche
 massa_nel_sistema = 0 #massa totale del sistema calcolata
 numero_leaf = 0 #numero totale delle foglie nel sistema
 numero_mouth = 0 #numero totale delle bocche nel sistema
 massa_per_oggetto = 0 #massa che le piante e le bocche assorbono per unità
-timer_ottimizazzione = 0 #un timer che ogni 100 frame si attiva, non ricordo perchè ci sia anche mille come timer, forse possiamo usarene solo uno dei 2
+timer_ottimizazzione = 0 #un timer che ogni 100 frame si attiva
 differenza_massa = 0 #serve per rendere la massa stabile nel sistema, viene da massa iniziale-massa attuale
 massa_nel_sistema1 = 0 #massa data inizialmente nel sistema (viene data su randomizazzione o su load)
+graphic_point_numero_veicle = [] #array che tiene le posizioni dei punti nel garfico che indicano il numero di veicle nel tempo
+graphic_Time=100 #tempo della prossima attivazione del grafico (in frame)
+pointTime=graphic_Time #ogni quanto il grafico viene aggiornato
+num_graphic_point = 0 #numero di punti nel grafico
+graphic_point_numero_mass = [] #massa nel tempo
+graphic_point_massa_per_oggetto= [] #massa per oggetto
+veicle_totali = 0 #veicoli totali creati nella simulazione (conatndo anche quelli morti)
+candidates_ancestor = [] #veicoli che se hanno discendenti ancora vivi nella epoca successiva diventano ancestor e saranno salvati nel albero genealogico
+ancestor = [] #contiene i dati per stampare a video (quando ci sarà) un albero genealogico di tutti gli esserini
+epoch_timer = 0 #timer per scandire ogni epoca, pensavo di fare un epoca = 1000000 di frame (circa 100 generazioni)
+epoch = 0 #numero di epoche passate dall'inizio della simulazione
+num_candidates_ancestor = 0 #numero di candidati per diventare anchestor
+num_ancestor = 0 #numero di elemanti nell'albero genealogico
 
 
 def dist(p1x, p1y, p2x, p2y):
@@ -43,27 +55,66 @@ def dist(p1x, p1y, p2x, p2y):
 
 
 class Mass:   #questa classe inizializza le proprietà "meccaniche"/visive, emm in realtà è la massa che si genera quando un blocchetto viene distrutto e mantiene la massa costante nel sistema
-    def __init__(self,xx,yy,mass):
+    def __init__(self,xx,yy,mass,velocita_deterioramento):
         self.x = xx
         self.y = yy
         self.mass = mass #quantità di massa
+        self.velocita_deterioramento = velocita_deterioramento #serve per fare in modo che le masse grandi (quelle formate da un veicolo che muore) non restino troppo nella simulazione ma si comportano come se fossero state create tante masse piccole (una per blocchetto) in questo modo ci sono meno masse nella simulazione da calcolare
+        self.timer_ottimizazzione = 0 #timer per ottimizzare la simulazione 
+        self.numero_veicle_vicini = 0 #numero di veicle che la massa ritiene possa mangiarla nel timer ottimizazzione (i veicle che stanno in un certo range)
+        self.veicle_vicini = []
 
 
     def move(self,i):
         global numero_mass
         global mass
         global massa_libera_nel_sistema
-        self.mass -= velocita #la massa si deteriora e diventa massa_libera_nel_sistema
-        massa_libera_nel_sistema += velocita
+        self.mass -= velocita*self.velocita_deterioramento #la massa si deteriora e diventa massa_libera_nel_sistema
+        massa_libera_nel_sistema += velocita*self.velocita_deterioramento #la massa nel sistema resta costante, poi la massa libera_nel_sistema viene data alle piante e alle bocche e il ciclo resta stabile
+
+    def see(self):
+        self.timer_ottimizazzione += 1
+        if self.timer_ottimizazzione >= 100:  # ogni 100 frame guarda tutti i veicoli della simulazione e li mette in una lista
+            self.timer_ottimizazzione = 0
+            self.numero_veicle_vicini = 0
+            self.veicle_vicini = []
+            for i in range(numero_veicle):
+                distanza = dist(self.x, self.y, veicle[i].x, veicle[i].y)
+                if distanza < (100 * velocita * 10): #questo è il range in cui credo che i veicle possano raggiungere la massa, dove 100 sta per i 100 frame e 10 sta per i pixel a frame che i veicle possono fare massimo (sarebbe da calcolare non so quanto possano andare veloci i veicle)
+                    self.numero_veicle_vicini += 1
+                    self.veicle_vicini.append(i)
+        distanza_veicle_piu_vicino = 200  # per ora ho messo 200 che sabbe la distanza massima di collisione tra i vecle sapendo che sono tutti uguali, in futuro si deve basare su quanto è grande il veicle più grande della simulazione
+        for i in range(self.numero_veicle_vicini):  # ogni frame controlla solo gli elementi vicini
+            g = self.veicle_vicini[i]
+            if g < numero_veicle: #nel caso qualche veicle sia morto nel frattempo
+                distanza = dist(self.x, self.y, veicle[g].x, veicle[g].y)
+                if distanza < distanza_veicle_piu_vicino:
+                    distanza_veicle_piu_vicino = distanza
+                    if distanza_veicle_piu_vicino < 200:
+                        for ii in range(veicle[g].DNA[0]): #per ogni componente del veicle nel raggio di collisione
+                            if veicle[g].block[ii].life > 0: #se ancora attivo
+                                if veicle[g].DNA[ii*3+3] == 3 or veicle[g].DNA[ii*3+3] == 4 or veicle[g].DNA[ii*3+3] == 5 or veicle[g].DNA[ii*3+3] == 6: #ed è una bocca
+                                    pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 2]  #e la sua posizione rispetto al veicolo
+                                    pos2y = veicle[g].y + math.cos(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 1] + math.cos(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 2]
+                                    if dist(self.x,self.y,pos2x,pos2y)<15*veicle[g].r: #è esattamente la posizione della massa nel raggio di dimensione del blocchetto
+                                        print("aaaaaaaaaaaaaaaaaaaaaa") #bhe per ora non succede niente, stampoa aaaaaaaa, in futuro la massa viene assorbita (sarebbe carino che in base alla dimensione del veicolo che mangia la assorbe più o meno lentamente)
+                                        print(g)
+
 
     def show(self):
-        j, k = SCHERMO.get_size()
-        X = (self.x + x) * zoom + j / 2 #calcola le coordinate di dove stampare a schermo
-        Y = (self.y + y) * zoom + k / 2
-        pygame.draw.circle(SCHERMO, (200, 0, 0), (X, Y), zoom *15 *self.mass/1000, 0) #superficie, colore RGB, centro, raggio, spessore linea
-        if zoom > 0.4: #ottimizza la parte grafica, i dettagli si vedono solo quando ti avvicini
-            pygame.draw.circle(SCHERMO, (100, 0, 0), (X, Y), zoom * 15*self.mass/1000, int(zoom*2*self.mass/1000))
-            pygame.draw.circle(SCHERMO, (150, 0, 0), (X, Y), zoom * 10*self.mass/1000, 0) #il raggio è da sistemare, sarebbe da fare che sia la radice della massa perchè per ora a volte si generano masse davvero grandi se vengono da esserini grandi e da blocchetti con tanta massa tipo shell
+        if zoom > 0.01 : #in futuro è da abbassare
+            j, k = SCHERMO.get_size()
+            X = (self.x + x) * zoom + j / 2
+            Y = (self.y + y) * zoom + k / 2
+            if X>0 and Y>0 and X<j and Y < k: #se l'oggetto non è sullo schermo allora non lo elabora
+                r = math.sqrt(self.mass/1000)
+                j, k = SCHERMO.get_size()
+                X = (self.x + x) * zoom + j / 2 #calcola le coordinate di dove stampare a schermo
+                Y = (self.y + y) * zoom + k / 2
+                pygame.draw.circle(SCHERMO, (200, 0, 0), (X, Y), zoom *15 * r, 0) #superficie, colore RGB, centro, raggio, spessore linea
+                if zoom > 0.4: #ottimizza la parte grafica, i dettagli si vedono solo quando ti avvicini
+                    pygame.draw.circle(SCHERMO, (100, 0, 0), (X, Y), zoom * 15 * r, int(zoom*2*self.mass/1000))
+                    pygame.draw.circle(SCHERMO, (150, 0, 0), (X, Y), zoom * 10 * r, 0) #il raggio è da sistemare, sarebbe da fare che sia la radice della massa perchè per ora a volte si generano masse davvero grandi se vengono da esserini grandi e da blocchetti con tanta massa tipo shell
 
 
 class nucleus: #parte centrale dell'esserino, se manca, muore
@@ -586,13 +637,13 @@ class sail_4:
             surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
 
 
-class stomach: #mette da parte lenergia non utilizzata
+class stomach: #mette da parte l'energia non utilizzata
     def __init__(self,xx,yy):
         self.life = 3
         self.x = xx
         self.y = yy
         self.r = 1
-        self.energy_stored = 800
+        self.energy_stored = 800 #energia storata inizialmente (in modo che chi è appena nato e non ha le foglie possa muoversi)
         self.impact_damage=1
         self.damage=0
         self.mass = 2
@@ -614,7 +665,7 @@ class stomach: #mette da parte lenergia non utilizzata
 
 
 class Veicle:
-    def __init__(self, xp, yp, r, xforce, yforce, DNA):
+    def __init__(self, xp, yp, r, xforce, yforce, DNA,id_ancestor):
         self.age = r*100 #età che ha il veicolo, se supera una soglia muore di vecchiaia, ora si basa su r che sarebbe un parametro che ne determina la dimensione in modo che a inizio simulazione non muoiono tutti assieme dopo un tot di tempo, dovrà essere modifiacato
         self.x = xp
         self.y = yp
@@ -687,30 +738,39 @@ class Veicle:
                 self.stomach.append(i)
             self.weight += self.block[i].mass#massa totale del veicolo base
         self.mass = self.weight*self.r*self.r #massa effettiva
-        self.energy = 0
+        self.energy = 0 #quanta energia possiede il veicolo
         self.DNA = DNA
         self.timer_ottimizazzione = random.randint(0, 100)
         self.max_speed = 10 #ora è un valore a caso ma sarebbe la velocità massuima che può raggiungere, serve per sapere il raggio di spazio in cui può stare in un determinato tempo
         self.numero_veicle_vicini = 0 #numero veicle nel range in cui puo essere nel tempo di ottimizazzione (100 frame)
         self.veicle_vicini = []
         self.id_collision_detection = 1000000 #quando diverso da 1000000 dice id del veicolo con cui si sta collidendo in modo che uno solo dei due veicle calcoli l'urto
-        self.collision_detection = True
+        self.collision_detection = True #se True sta collidendo con un veicolo
         self.move_check = False #serve per capire se il veicolo si sta muovendo e se ha senso calcolare la vista
         self.torsion_force = random.randint(-1,1)
         self.velocita_angolare = 0
+        self.direzzione_corrente = random.uniform(-math.pi, math.pi)
+        self.torsione_corrente = random.uniform(-1, 1)
+        self.rigeneration = False
+        self.id_ancestor = id_ancestor #questo è insufficente per fare l'albero genealogico ma ci lavorerò i prossimi giorni
 
 
     def move(self):
         global numero_veicle
+        self.xforce = 0
+        self.yforce = 0
+        self.torsion_force = 0
         somma = 0
         for i in range(self.DNA[0]):
             if self.block[i].life < self.block[i].max_life:
                 self.block[i].rigeneration_timer += velocita
+                self.rigeneration = True
                 somma = -0.5*velocita #consuma energia per rigenerarsi
                 if self.block[i].rigeneration_timer>1000: #aspetta 1000 frame prima di ricomparire
                     self.block[i].life += 0.002*velocita
                     if self.block[i].life >= self.block[i].max_life:
                         self.block[i].life = self.block[i].max_life
+                        self.rigeneration = False
                         self.block[i].rigeneration_timer = 0 #resetta il timer per una futura rigenerazione
                         if self.block[i].r == 3: #se il blocchetto rigenerato è una vela
                             self.sail += 1 #rimette il numero di vele a posto, viene messo a 0 nella funzione collisione
@@ -734,9 +794,17 @@ class Veicle:
                         somma = 0
         self.energy = somma
         if self.sail>0:
-            self.xforce = self.xforce + random.uniform(-0.1, 0.1) * cursore_velocita * self.sail #il calcolo fatto così è sbagliato, va assolutamente rifatto
-            self.yforce = self.yforce + random.uniform(-0.1, 0.1) * cursore_velocita * self.sail
-            self.torsion_force = self.torsion_force + random.uniform(-0.05, 0.05) * cursore_velocita * self.sail
+            self.direzzione_corrente += random.uniform(-0.1, 0.1)
+            if self.direzzione_corrente >= 2*math.pi or self.direzzione_corrente < -2*math.pi:
+                self.direzzione_corrente = 0
+            self.torsione_corrente += random.uniform(-0.05, 0.05)
+            if self.torsione_corrente>1:
+                self.torsione_corrente=1
+            if self.torsione_corrente<-1:
+                self.torsione_corrente=-1
+            self.xforce = self.xforce + math.cos(self.direzzione_corrente) * self.sail #il calcolo fatto così è sbagliato, va assolutamente rifatto
+            self.yforce = self.yforce + math.sin(self.direzzione_corrente) * self.sail
+            self.torsion_force += self.torsione_corrente * self.sail
         self.ax = self.xforce/ self.mass
         self.ay = self.yforce/ self.mass
         self.vx = self.vx + (self.ax - 0.01*math.sqrt(self.vx ** 2)*self.vx) * velocita
@@ -777,7 +845,7 @@ class Veicle:
         if self.r >= 2: #raggiunta una certa dimensione si riproduce
             self.r = 2
             if numero_veicle < 1000:
-                new_veicle(self.x, self.y, 0, self.spawn_range, self.DNA)
+                new_veicle(self.x, self.y, 0, self.spawn_range, self.DNA,self.id_ancestor)#per ora il DNA viene copiato uguale, bisogna aggiungere delle mutazioni
                 numero_veicle += 1
                 self.r -= (self.r/2)**2/self.r
 
@@ -824,7 +892,7 @@ class Veicle:
 
     def see_bordi(self):
         if self.x > map_x_size/2:
-            self.vx = -self.vx #inverte la velocità (rimbalza), sarebbe da fare che cambia direzione perchè sennò continua a sbattere
+            self.vx = -self.vx #inverte la velocità (rimbalza), sarebbe da fare che cambia direzione perchè altrimenti continua a sbattere
             self.x = self.x + self.vx * velocita
             self.torsion_force = 0
             self.xforce = 0
@@ -856,7 +924,7 @@ class Veicle:
         if self.y < -map_y_size/2-10:
             self.life = 0
 
-    def show(self,id):
+    def show(self):
         if zoom > 0.01 : #in futuro è da abbassare
             j, k = SCHERMO.get_size()
             X = (self.x + x) * zoom + j / 2
@@ -868,7 +936,7 @@ class Veicle:
                     pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom * (400), 2) #verde altrimenti
                 #pygame.draw.circle(SCHERMO, (0, 155, 0), (X, Y), 2 * zoom * 50, 0)
                 for i in range(self.DNA[0]):
-                    #if self.DNA[i*3+3] == 12: #roba strana 
+                    #if self.DNA[i*3+3] == 12: #roba strana
                         #pygame.draw.line(SCHERMO, (150, 150, 150), (X, Y), (X + math.sin(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.sin(self.angle + math.pi / 2) * zoom * self.r * 30 * self.DNA[i*3+2],Y + math.cos(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.cos(self.angle + math.pi / 2) * zoom * self.r * 30 *self.DNA[i*3+2]), int(5 * zoom * self.r))
                     if self.block[i].life>0:
                         self.block[i].draw(SCHERMO, [0, 0, zoom*self.r*30, zoom*self.r*30], self.r, self.angle, 0, X, Y)
@@ -888,6 +956,19 @@ class Veicle:
                 #SCHERMO.blit(numero, (X, Y))
 
 
+class Ancestor: #salta pure questa classe è ancora in fase di costruzione
+    def __init__(self,sample,epoch,pos_y):
+        self.epoch = epoch
+        self.ancestor = sample.id_ancestor
+        self.sample = sample
+        self.sample.x = 0
+        self.sample.y = 0
+
+
+    def show(self):
+        self.sample.show()
+
+
 def show_bordi(): #disegna i bordi in modo efficente
     j, k = SCHERMO.get_size()
     if x > map_x_size/2-j/(2*zoom):
@@ -902,10 +983,14 @@ def show_bordi(): #disegna i bordi in modo efficente
 
 def delete_veicle(ii):
     global numero_veicle,numero_mass,mass
+    massa = 0
+    numero_blocchetti = 0
     for i in range(veicle[ii].DNA[0]): #per ogni blocchetto morto genera una quantità di massa proporzionale alla massa del blocchetto
         if veicle[ii].block[i].life>0:
-            mass.append(Mass(veicle[ii].x, veicle[ii].y, veicle[ii].block[i].mass * 1000 * veicle[ii].r * veicle[ii].r))
-            numero_mass += 1
+            massa += veicle[ii].block[i].mass
+            numero_blocchetti += 1
+    mass.append(Mass(veicle[ii].x, veicle[ii].y, massa * 1000 * veicle[ii].r * veicle[ii].r,numero_blocchetti))
+    numero_mass += 1
     veicle[ii]=veicle[numero_veicle - 1] #sostituisce il veicle morto con lultimo veicle dell ì'array
     veicle.pop(numero_veicle - 1) #elimina l'ultimo elemanto dell'array, non ricordo perchè ma questa operazione mi evitava problemi
 
@@ -915,10 +1000,12 @@ def delete_mass(i): #elimina la massa dal sistema
     mass.pop(numero_mass - 1)
 
 
-def new_veicle(xp, yp, r, spawn_range,DNA):
+def new_veicle(xp, yp, r, spawn_range,DNA,id_ancestor):
+    global veicle_totali
     xv = xp + random.randint(-spawn_range, spawn_range)
     yv = yp + random.randint(-spawn_range, spawn_range)
-    veicle.append(Veicle(xv, yv, r, 0, 0, DNA))
+    veicle.append(Veicle(xv, yv, r, 0, 0, DNA,id_ancestor))
+    veicle_totali += 1
 
 
 def collision_detection(id1,id2):
@@ -930,7 +1017,7 @@ def collision_detection(id1,id2):
     size=veicle[id1].r
     for ii in range(veicle[id1].DNA[0]):
         if veicle[id1].block[ii].life > 0:
-            pos1x = xx + math.sin(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.sin(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2] #posizione esatta del impatto calcolata con le coordinate del blocchetto che rileva la collisione rispetto al veicle 1 
+            pos1x = xx + math.sin(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.sin(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2] #posizione esatta del impatto calcolata con le coordinate del blocchetto che rileva la collisione rispetto al veicle 1
             pos1y = yy + math.cos(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.cos(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
             for i in range(veicle[g].DNA[0]):
                 if veicle[id2].block[i].life > 0:
@@ -985,20 +1072,20 @@ def collision_detection(id1,id2):
                         #veicle[id2].yforce = - veicle[id2].yforce
                         veicle[id1].velocita_angolare = 0 #trasferisce tutta la velocità di rotazione in velocuìità di movimento
                         veicle[id2].velocita_angolare = 0
-                        veicle[id1].block[ii].life -= impatto/40*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage #vengono danneggiati i blocchetti seuendo i vari fattori, come impatto,massa, danno di impatto e danno del blocchetto
+                        veicle[id1].block[ii].life -= impatto/40*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage #vengono danneggiati i blocchetti seguendo i vari fattori, come impatto,massa, danno di impatto e danno del blocchetto
                         veicle[id2].block[i].life -= impatto/40*veicle[id1].block[ii].impact_damage+0.1+veicle[id1].block[ii].damage
                         veicle[id1].xforce = 0
                         veicle[id1].yforce = 0
                         veicle[id2].xforce = 0
                         veicle[id2].yforce = 0
                         if veicle[id1].block[ii].life <= 0:
-                            mass.append(Mass(pos1x,pos1y,veicle[id1].block[ii].mass*1000*veicle[id1].r*veicle[id1].r)) #genera una massa dove è stato perso un blocchetto, ce un problema però, la massa viene creata svariati frame dopo l'impatto, cosa assolutamente da sistemare
+                            mass.append(Mass(pos1x,pos1y,veicle[id1].block[ii].mass*1000*veicle[id1].r*veicle[id1].r,1)) #genera una massa dove è stato perso un blocchetto, ce un problema però, la massa viene creata svariati frame dopo l'impatto, cosa assolutamente da sistemare
                             numero_mass += 1
                             if veicle[id1].block[ii].r==3: #verifica che il blocchetto perso sia una vela
-                                veicle[id1].sail -= 1 
+                                veicle[id1].sail -= 1
                                 veicle[id1].torsion_force = 0
                         if veicle[id2].block[i].life <= 0:
-                            mass.append(Mass(pos2x, pos2y, veicle[id2].block[i].mass*1000*veicle[id2].r*veicle[id2].r))
+                            mass.append(Mass(pos2x, pos2y, veicle[id2].block[i].mass*1000*veicle[id2].r*veicle[id2].r,1))
                             numero_mass += 1
                             if veicle[id2].block[i].r==3:
                                 veicle[id2].sail -= 1
@@ -1034,25 +1121,29 @@ def randomizazzione():
     global numero_veicle
     numero_veicle = 900 #ora è fisso a 900, ricordo che per ora dentro a veicle ce una funzione che impedisce di riprodursi quando ci sono 1000 veicle
     veicle_info = []
-    DNA = [14,0,0,0,1,0,5,-1,0,17,0,1,2,0,-1,2,0,2,1,0,3,1,0,-2,1,0,-3,1,-1,1,7,-1,-1,7,1,1,12,1,-1,12,-3,0,13] #DNA fatto a mano da me per creare un veicle sensato
+    DNA = [14,0,0,0,1,0,5,-1,0,17,0,1,2,0,-1,2,0,2,1,0,3,1,0,-2,1,0,-3,1,-1,1,7,-1,-1,7,1,1,12,1,-1,12,-3,0,13] #DNA fatto a mano da me per creare un veicle sensato, ma l'obbiettivo è che i primi DNA siano random (ovvaimente seguendo una certa logica)
     for i in range(numero_veicle): #genera le info per i veicle che per ora sono solo i DNA dei blocchetti, in futuro saranno molte più info
         veicle_info.append([random.randint(int(-map_x_size / 2), int(map_x_size / 2)), random.randint(int(-map_y_size / 2), int(map_y_size / 2)), random.randint(0, 1000),0,DNA])
 
 
 def inizializza(): #prende tutte le info e avvia la simulazione
-    global numero_veicle
+    global numero_veicle,veicle_totali
     global veicle
-    global veicle_info,massa_nel_sistema,massa_nel_sistema1
+    global veicle_info,massa_nel_sistema,massa_nel_sistema1,num_candidates_ancestor
     veicle = []
     for i in range(numero_veicle):
-        new_veicle(int(veicle_info[i][0]), int(veicle_info[i][1]), float(veicle_info[i][2]), int(veicle_info[i][3]), veicle_info[i][4]) #crea nuovi veicle
+        new_veicle(int(veicle_info[i][0]), int(veicle_info[i][1]), float(veicle_info[i][2]), int(veicle_info[i][3]), veicle_info[i][4],i) #crea nuovi veicle
+        veicle_totali += 1
         for ii in range(veicle[i].DNA[0]):
             massa_nel_sistema1 += veicle[i].block[ii].mass*1000*veicle[i].r*veicle[i].r #calcola la massa iniziale del sistema, che poi dovrà essere costante
     massa_nel_sistema = massa_nel_sistema1
     mass = []
+    for i in range(numero_veicle): #test per l'albero genealogico
+        candidates_ancestor.append(Ancestor(Veicle(0, 0, 1, 0, 0, veicle_info[i][4],i),0,0))
+    num_candidates_ancestor = numero_veicle
 
 
-def load(): #qua è tutto da sistemare, penso che il funzionamento si capisca ma mancano  olti dati essenziali da salvare e caricare
+def load(): #qua è tutto da sistemare, penso che il funzionamento si capisca ma mancano  altri dati essenziali da salvare e caricare
     global veicle_info
     global numero_veicle
     global timer
@@ -1086,7 +1177,9 @@ def save(): #si attiva schiacciando un pulsante in alto a sinistra, crea dei fil
 
 
 def simulation(): #parte principale, va sempre, anche quando la simulzione non è visualizzata, qiesta funzione viene chiamata a ogni frame quindi essenziale che sia efficente
-    global timer,numero_veicle,timer_ottimizazzione,numero_mass,mille,grafica,massa_libera_nel_sistema,numero_mouth,numero_leaf,massa_per_oggetto,massa_nel_sistema,massa_nel_sistema1,differenza_massa
+    global timer,numero_veicle,timer_ottimizazzione,numero_mass,mille,grafica,massa_libera_nel_sistema,numero_mouth
+    global numero_leaf,massa_per_oggetto,massa_nel_sistema,massa_nel_sistema1,differenza_massa,epoch_timer,epoch,num_candidates_ancestor
+    global candidates_ancestor,num_ancestor
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -1102,7 +1195,28 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
     timer_ottimizazzione += 1
     numero_leaf = 0
     numero_mouth = 0
+    epoch_timer += velocita
+    #if epoch_timer>10000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
+        #print(num_candidates_ancestor)
+        #epoch_timer = 0
+        #epoch += 1
+        #for i in range(num_candidates_ancestor):
+            #for ii in range(numero_veicle):
+                #if veicle[ii].id_ancestor == candidates_ancestor[i].sample.id_ancestor:
+                    #ancestor.append(candidates_ancestor[i])
+                    #num_ancestor += 1
+        #for i in range(numero_veicle):
+            #veicle[i].id_ancestor = i
+        #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        #print(num_ancestor)
+        #print(numero_veicle)
+        #candidates_ancestor = []
+        #num_candidates_ancestor = 0
+        #for i in range(numero_veicle):
+            #candidates_ancestor.append(Ancestor(Veicle(0,0,1,0,0,veicle[i].DNA,veicle[i].id_ancestor),epoch,0))
+            #num_candidates_ancestor += 1
     if timer_ottimizazzione>100:
+        #print(massa_per_oggetto)
         timer_ottimizazzione = 0
         massa_nel_sistema = 0
         for i in range(numero_veicle):
@@ -1112,7 +1226,8 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
             massa_per_oggetto = massa_libera_nel_sistema / (numero_leaf + numero_mouth * 2) #calcola la massa assorbita per oggetto
             massa_libera_nel_sistema = 0 #se la massa viene assorbita la massa libera che rimane è 0
         for i in range(numero_veicle):
-            veicle[i].r += (massa_per_oggetto * veicle[i].numero_leaf + massa_per_oggetto * veicle[i].numero_mouth * 2) / (1000 * veicle[i].r * veicle[i].weight) #i veicle che assorbono massa crescono
+            if not veicle[i].rigeneration:
+                veicle[i].r += (massa_per_oggetto * veicle[i].numero_leaf + massa_per_oggetto * veicle[i].numero_mouth * 2) / (1000 * veicle[i].r * veicle[i].weight) #i veicle che assorbono massa crescono
             for ii in range(veicle[i].DNA[0]):
                 massa_nel_sistema += veicle[i].block[ii].mass*veicle[i].r*veicle[i].r*1000 #calcola la massa attuale nel sistema
         for i in range(numero_mass):
@@ -1122,6 +1237,7 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
     massa_libera_nel_sistema += differenza_massa/200 #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
     for i in range(numero_mass):
         mass[i].move(i) #calcola la massa, esempio il fatto che marcisca, poi ci sarebbe da mettere mass[i].see() per fare in modo che la massa veda i veicle (e non viceversa) per risparmiare ram
+        mass[i].see()
     #print(timer)
     #print(massa_per_oggetto)
     for i in range(numero_veicle):
@@ -1147,13 +1263,91 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
     for i in range(numero_mass):
         if mass[i].mass <= 0:
             delete_mass(i)
-
-
+    grafico() #mette le nuove info nel grafico
     timer += 1 * velocita #il tempo della simulazione viene aumentato per la velocità
 
 
-def show_grafico(): #in futuro se attivo mostra i grafici e le varie info della simulazione
-    pygame.draw.circle(SCHERMO, (255, 255, 255), (180, 150), 150, 0)
+class Graphic_point: #classe che identifica i punti sui grafici
+    def __init__(self,x,y,color):
+        self.num = x
+        self.x = x
+        self.y = y
+        self.color = color
+    def show1(self): #ho dovuto fare show1 show2 ecc.. perchè...
+        j, k = SCHERMO.get_size()
+        X1 = self.x*(j-100)/150+100
+        Y1 = k-self.y*(k-200)/1000-100
+        X2 = graphic_point_numero_veicle[self.num - 1].x * (j - 100) / 150 + 100 #per disegnare le linee mi serve sapere il punto precedente quindi anche il tipo
+        Y2 = k - graphic_point_numero_veicle[self.num - 1].y * (k - 200) / 1000 - 100
+        pygame.draw.line(SCHERMO, self.color, (X2, Y2), (X1, Y1),5)
+        pygame.draw.circle(SCHERMO, self.color, (X1, Y1), 3, 0)
+
+    def show2(self):
+        j, k = SCHERMO.get_size()
+        X1 = self.x*(j-100)/150+100
+        Y1 = k-self.y*(k-200)/1000-100
+        X2 = graphic_point_numero_mass[self.num - 1].x * (j - 100) / 150 + 100
+        Y2 = k - graphic_point_numero_mass[self.num - 1].y * (k - 200) / 1000 - 100
+        pygame.draw.line(SCHERMO, self.color, (X2, Y2), (X1, Y1),5)
+        pygame.draw.circle(SCHERMO, self.color, (X1, Y1), 3, 0)
+
+
+    def show3(self):
+        j, k = SCHERMO.get_size()
+        X1 = self.x*(j-100)/150+100
+        Y1 = k-self.y*(k-200)/1000-100
+        X2 = graphic_point_massa_per_oggetto[self.num - 1].x * (j - 100) / 150 + 100
+        Y2 = k - graphic_point_massa_per_oggetto[self.num - 1].y * (k - 200) / 1000 - 100
+        pygame.draw.line(SCHERMO, self.color, (X2, Y2), (X1, Y1),5)
+        pygame.draw.circle(SCHERMO, self.color, (X1, Y1), 3, 0)
+
+
+def grafico():
+    global pointTime,graphic_Time,graphic_point_numero_veicle,num_graphic_point,graphic_point_numero_mass,graphic_point_massa_per_oggetto
+    if timer>pointTime:
+        pointTime += graphic_Time
+        graphic_point_numero_veicle.append(Graphic_point(num_graphic_point, numero_veicle, (0, 200, 0)))
+        graphic_point_numero_mass.append(Graphic_point(num_graphic_point, numero_mass, (200, 0, 0)))
+        graphic_point_massa_per_oggetto.append(Graphic_point(num_graphic_point, massa_per_oggetto, (0, 0, 200)))
+        num_graphic_point += 1
+        if num_graphic_point>150:
+            graphic_Time += graphic_Time #quando il grafico raggiunge il bordo destro si dimezza
+            graphic_point1 = []
+            graphic_point2 = []
+            graphic_point3 = []
+            for i in range(74):
+                gigi = (graphic_point_numero_veicle[i * 2 + 1].y + graphic_point_numero_veicle[i * 2 + 2].y) / 2
+                graphic_point1.append(Graphic_point(i,gigi,(0,200,0)))
+                gigi = (graphic_point_numero_mass[i * 2 + 1].y + graphic_point_numero_mass[i * 2 + 2].y) / 2
+                graphic_point2.append(Graphic_point(i,gigi,(200,0,0)))
+                gigi = (graphic_point_massa_per_oggetto[i * 2 + 1].y + graphic_point_massa_per_oggetto[i * 2 + 2].y) / 2
+                graphic_point3.append(Graphic_point(i,gigi,(0,0,200)))
+            graphic_point_numero_veicle = []
+            graphic_point_numero_mass = []
+            graphic_point_massa_per_oggetto = []
+            for i in range(74):
+                graphic_point_numero_veicle.append(Graphic_point(i, graphic_point1[i].y, graphic_point1[i].color))
+                graphic_point_numero_mass.append(Graphic_point(i, graphic_point2[i].y, graphic_point2[i].color))
+                graphic_point_massa_per_oggetto.append(Graphic_point(i, graphic_point3[i].y, graphic_point3[i].color))
+            num_graphic_point = 74
+
+
+def show_grafico():
+    j, k = SCHERMO.get_size()
+    pygame.draw.rect(SCHERMO,(250,250,250),(0,0,j,k)) #vari sfondi
+    pygame.draw.rect(SCHERMO,(180,180,180),(100,0,j,k-100))
+    for i in range(10):
+        pygame.draw.line(SCHERMO,(0,0,0),(100,100+i*(k-200)/10),(j,100+i*(k-200)/10),1)
+        assex = FONT2.render(str(1000-i*100), True, (0, 0, 0))
+        SCHERMO.blit(assex, (50, 90+i*(k-200)/10))
+    for i in range(10):
+        pygame.draw.line(SCHERMO,(100,100,100),(100+i*(j-100)/10,0),(100+i*(j-100)/10,k-100),1)
+        assey = FONT2.render(str(int((graphic_Time-i*graphic_Time/10)*150)), True, (0, 0, 0))
+        SCHERMO.blit(assey,(j-i*(j-100)/10-20, k-50))
+    for i in range(num_graphic_point-1):
+        graphic_point_numero_veicle[i + 1].show1()
+        graphic_point_numero_mass[i + 1].show2()
+        graphic_point_massa_per_oggetto[i + 1].show3()
 
 
 def show_simulation():
@@ -1162,6 +1356,8 @@ def show_simulation():
     global follow, veicle_to_follow, press_timer
     j, k = SCHERMO.get_size()
     SCHERMO.fill((65, 125, 150))
+    grafico = False
+    genealogical_tree = False
     press_timer += 1
     if press_timer > 10:
         press_timer = 0
@@ -1195,15 +1391,18 @@ def show_simulation():
             velocita = 8
             cursore_velocita = 4
         if Mx < 100 and My < 100: #un bottone in alto a sinistra che dovrebbe avvaire il grafico e le varie info
-            show_grafico()
+            grafico = True
         if Mx > j - 100 and My < 100: #se premi in alto a destra salvi la simulazione
             save()
     for i in range(numero_veicle):
-        veicle[i].show(i)
-        veicle[i].collision_detection = False #resetta le collision_detection  su False solo alla fine di tutto il calcolo, in questo modo vedo graficamente se si stanno collidendo o no,ma porca puttana merda ecco cosa non va, quando vado in modalità efficenza queste collisioni non vengono resettate e quindi continua a elaborarle, ecco perche rallenta dopo un po
+        veicle[i].show()
     for i in range(numero_mass):
         mass[i].show() #fa vedere le masse presenti nella simulazione, resta da capire perchè compaiono dopo un tot
     show_bordi() #mostra i bordi della mappa
+    if grafico:
+        show_grafico()
+    #if epoch>=1: #da completare in futuro, usato solo per test
+        #ancestor[0].show()
     # cursore velocità
     pygame.draw.line(SCHERMO, 100, (150, 50), (350, 50), 10)
     pygame.draw.circle(SCHERMO, (0, 0, 255), (cursore_velocita * 50 + 150, 50), 20, 0)
@@ -1229,7 +1428,7 @@ def show_base(): #qui si vedono le cose base della simualzione per farla andare 
     SCHERMO.blit(timer_render, (70, 87))
     num_plant_render = FONT1.render(str(numero_veicle), True, (0, 0, 0)) #poi il numero di veicle
     SCHERMO.blit(num_plant_render, (10, 167))
-    num_mass_render = FONT1.render(str(massa_nel_sistema), True, (0, 0, 0)) #poi la massa nella simulazione
+    num_mass_render = FONT1.render(str(numero_mass), True, (0, 0, 0)) #poi la massa nella simulazione
     SCHERMO.blit(num_mass_render, (110, 167))
     pygame.display.flip()
     clock.tick(500)
@@ -1239,13 +1438,10 @@ def show_base(): #qui si vedono le cose base della simualzione per farla andare 
 accensione()
 finished = False
 while not finished:
-    mille += 1
     simulation()
-    if not mille > 100:
-        if grafica:
-            show_simulation()
-        else:
-            show_base()
+    if grafica:
+        show_simulation()
     else:
-        mille = 0
-        show_simulation() #questa grandissima stronazata serviva per ovvaire al casino spiegato in precedenza, praticamente in modalità non grafica la simulazione rallentava inspiegabilmente, in questo modo ogni 100 frame attivo la modalità grafica per sistemare questo problema, si è bruttissimo da vedere ma tempo che leggi questo mex lavrò già sistemata
+        show_base()
+    for i in range(numero_veicle):
+        veicle[i].collision_detection = False #resetta le collision_detection  su False solo alla fine di tutto il calcolo, è solo momentaneo, poi verrà sistemato
