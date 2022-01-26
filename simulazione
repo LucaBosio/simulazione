@@ -24,7 +24,6 @@ map_x_size = 100000 #dimensioni mappa (rispetto alla scorsa simulazione è 10x10
 map_y_size = 100000
 numero_veicle = 0 #numro dei veicoli (esserini) che verrà aggiunto più tardi in randomizazzione o in load
 numero_mass = 0 #numero di blocchetti massa totali
-press_timer = 0 #serve per premere certi tasti che per ora non ci sono, (viene dalle vecchie simulazioni dove potevi schiacciare su un esserino e seguirlo)
 mass = []
 massa_libera_nel_sistema = 0 #massa che dalla classe pianta passa alle piante e alle bocche
 massa_nel_sistema = 0 #massa totale del sistema calcolata
@@ -47,6 +46,9 @@ epoch_timer = 0 #timer per scandire ogni epoca, pensavo di fare un epoca = 10000
 epoch = 0 #numero di epoche passate dall'inizio della simulazione
 num_candidates_ancestor = 0 #numero di candidati per diventare anchestor
 num_ancestor = 0 #numero di elemanti nell'albero genealogico
+follow = False
+veicle_to_follow = 0 #id veicle da seguire
+press_timer = 0 #serve per premere certi tasti che per ora non ci sono, (viene dalle vecchie simulazioni dove potevi schiacciare su un esserino e seguirlo)
 
 
 def dist(p1x, p1y, p2x, p2y):
@@ -1008,6 +1010,14 @@ def new_veicle(xp, yp, r, spawn_range,DNA,id_ancestor):
     veicle_totali += 1
 
 
+def follow_veicle(i):
+    global x, y, zoom
+    j, k = SCHERMO.get_size()
+    if i < numero_veicle:
+        x = -veicle[i].x
+        y = -veicle[i].y
+
+
 def collision_detection(id1,id2):
     global numero_mass
     xx=veicle[id1].x
@@ -1223,18 +1233,20 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
             numero_leaf += veicle[i].numero_leaf
             numero_mouth += veicle[i].numero_mouth
         if (numero_leaf+numero_mouth*2)>0:
-            massa_per_oggetto = massa_libera_nel_sistema / (numero_leaf + numero_mouth * 2) #calcola la massa assorbita per oggetto
+            massa_per_oggetto = massa_libera_nel_sistema/ (numero_leaf + numero_mouth * 2) #calcola la massa assorbita per oggetto
             massa_libera_nel_sistema = 0 #se la massa viene assorbita la massa libera che rimane è 0
         for i in range(numero_veicle):
             if not veicle[i].rigeneration:
                 veicle[i].r += (massa_per_oggetto * veicle[i].numero_leaf + massa_per_oggetto * veicle[i].numero_mouth * 2) / (1000 * veicle[i].r * veicle[i].weight) #i veicle che assorbono massa crescono
             for ii in range(veicle[i].DNA[0]):
-                massa_nel_sistema += veicle[i].block[ii].mass*veicle[i].r*veicle[i].r*1000 #calcola la massa attuale nel sistema
+                if veicle[i].block[ii].life>0:
+                    massa_nel_sistema += veicle[i].block[ii].mass*veicle[i].r*veicle[i].r*1000 #calcola la massa attuale nel sistema
         for i in range(numero_mass):
             massa_nel_sistema += mass[i].mass  #calcola la massa attuale nel sistema conatndo anche la massa nelle classi mass
         differenza_massa = massa_nel_sistema1 - massa_nel_sistema #calcola la differenza di massa che dovrebbe esserci
         print(massa_nel_sistema1 - massa_nel_sistema)
-    massa_libera_nel_sistema += differenza_massa/200 #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
+    if velocita>0:
+        massa_libera_nel_sistema += differenza_massa/(200*velocita) #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
     for i in range(numero_mass):
         mass[i].move(i) #calcola la massa, esempio il fatto che marcisca, poi ci sarebbe da mettere mass[i].see() per fare in modo che la massa veda i veicle (e non viceversa) per risparmiare ram
         mass[i].see()
@@ -1394,6 +1406,16 @@ def show_simulation():
             grafico = True
         if Mx > j - 100 and My < 100: #se premi in alto a destra salvi la simulazione
             save()
+        for i in range(numero_veicle):
+            X = (veicle[i].x + x) * zoom + j / 2
+            Y = (veicle[i].y + y) * zoom + k / 2
+            if follow and (Mx > X+20 or Mx < X-20 or My > Y+20 or Mx < Y-20) and press_timer==9:
+                follow = False
+            if Mx < X+20 and Mx > X-20 and My < Y+20 and Mx > Y-20:
+                veicle_to_follow = i
+                follow = True
+    if follow:
+        follow_veicle(veicle_to_follow)
     for i in range(numero_veicle):
         veicle[i].show()
     for i in range(numero_mass):
