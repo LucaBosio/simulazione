@@ -1210,6 +1210,1416 @@ def show_simulation():
     # cerchio timer
     pygame.draw.circle(SCHERMO, (255, 255, 255), (80, 50), 50, 0)
     timer_render = FONT1.render(str(timer), True, (0, 0, 0))
+    SCHERMO.blit(timer_render, (50, 35))import pygame
+import random
+import sys
+import csv
+# import numpy
+import math
+
+pygame.init()
+clock = pygame.time.Clock()
+SCHERMO = pygame.display.set_mode((200, 200))
+
+FONT1 = pygame.font.SysFont('Comic Sans MS', 20, bold=True) #carico il font per le scritte grandi
+FONT2 = pygame.font.SysFont('Comic Sans MS', 10, bold=True) #carico il font per le scritte piccole
+
+timer = 0 #tempo da cui sta andando la simulazione
+grafica = False #dice se il programma deve stampare a video o no
+zoom = 1.0 #serve per zoommare
+velocita = 1 #velocità della simulazione (al massimo arriva a 8x)
+cursore_velocita = 1 #sia per stampare a video il cursore per scegliere la velocità sia per certi calcoli
+x = 0 #posizione x di dove stai guardando
+y = 0 #posizione y di dove stai guardando
+map_x_size = 100000 #dimensioni mappa (rispetto alla scorsa simulazione è 10x10 volte più grande)
+map_y_size = 100000
+numero_veicle = 0 #numro dei veicoli (esserini) che verrà aggiunto più tardi in randomizazzione o in load
+numero_mass = 0 #numero di blocchetti massa totali
+press_timer = 0 #serve per premere certi tasti che per ora non ci sono, (viene dalle vecchie simulazioni dove potevi schiacciare su un esserino e seguirlo)
+mass = []
+massa_libera_nel_sistema = 0 #massa che dalla classe pianta passa alle piante e alle bocche
+massa_nel_sistema = 0 #massa totale del sistema calcolata
+numero_leaf = 0 #numero totale delle foglie nel sistema
+numero_mouth = 0 #numero totale delle bocche nel sistema
+massa_per_oggetto = 0 #massa che le piante e le bocche assorbono per unità
+timer_ottimizazzione = 0 #un timer che ogni 100 frame si attiva
+differenza_massa = 0 #serve per rendere la massa stabile nel sistema, viene da massa iniziale-massa attuale
+massa_nel_sistema1 = 0 #massa data inizialmente nel sistema (viene data su randomizazzione o su load)
+graphic_point_numero_veicle = [] #array che tiene le posizioni dei punti nel garfico che indicano il numero di veicle nel tempo
+graphic_Time=100 #tempo della prossima attivazione del grafico (in frame)
+pointTime=graphic_Time #ogni quanto il grafico viene aggiornato
+num_graphic_point = 0 #numero di punti nel grafico
+graphic_point_numero_mass = [] #massa nel tempo
+graphic_point_massa_per_oggetto= [] #massa per oggetto
+veicle_totali = 0 #veicoli totali creati nella simulazione (conatndo anche quelli morti)
+candidates_ancestor = [] #veicoli che se hanno discendenti ancora vivi nella epoca successiva diventano ancestor e saranno salvati nel albero genealogico
+ancestor = [] #contiene i dati per stampare a video (quando ci sarà) un albero genealogico di tutti gli esserini
+epoch_timer = 0 #timer per scandire ogni epoca, pensavo di fare un epoca = 1000000 di frame (circa 100 generazioni)
+epoch = 0 #numero di epoche passate dall'inizio della simulazione
+num_candidates_ancestor = 0 #numero di candidati per diventare anchestor
+num_ancestor = 0 #numero di elemanti nell'albero genealogico
+
+
+def dist(p1x, p1y, p2x, p2y):
+    dist = math.sqrt((p1x-p2x)**2+(p1y-p2y)**2)
+    return dist
+
+
+class Mass:   #questa classe inizializza le proprietà "meccaniche"/visive, emm in realtà è la massa che si genera quando un blocchetto viene distrutto e mantiene la massa costante nel sistema
+    def __init__(self,xx,yy,mass,velocita_deterioramento):
+        self.x = xx
+        self.y = yy
+        self.mass = mass #quantità di massa
+        self.velocita_deterioramento = velocita_deterioramento #serve per fare in modo che le masse grandi (quelle formate da un veicolo che muore) non restino troppo nella simulazione ma si comportano come se fossero state create tante masse piccole (una per blocchetto) in questo modo ci sono meno masse nella simulazione da calcolare
+        self.timer_ottimizazzione = 0 #timer per ottimizzare la simulazione 
+        self.numero_veicle_vicini = 0 #numero di veicle che la massa ritiene possa mangiarla nel timer ottimizazzione (i veicle che stanno in un certo range)
+        self.veicle_vicini = []
+
+
+    def move(self,i):
+        global numero_mass
+        global mass
+        global massa_libera_nel_sistema
+        self.mass -= velocita*self.velocita_deterioramento #la massa si deteriora e diventa massa_libera_nel_sistema
+        massa_libera_nel_sistema += velocita*self.velocita_deterioramento #la massa nel sistema resta costante, poi la massa libera_nel_sistema viene data alle piante e alle bocche e il ciclo resta stabile
+
+    def see(self):
+        self.timer_ottimizazzione += 1
+        if self.timer_ottimizazzione >= 100:  # ogni 100 frame guarda tutti i veicoli della simulazione e li mette in una lista
+            self.timer_ottimizazzione = 0
+            self.numero_veicle_vicini = 0
+            self.veicle_vicini = []
+            for i in range(numero_veicle):
+                distanza = dist(self.x, self.y, veicle[i].x, veicle[i].y)
+                if distanza < (100 * velocita * 10): #questo è il range in cui credo che i veicle possano raggiungere la massa, dove 100 sta per i 100 frame e 10 sta per i pixel a frame che i veicle possono fare massimo (sarebbe da calcolare non so quanto possano andare veloci i veicle)
+                    self.numero_veicle_vicini += 1
+                    self.veicle_vicini.append(i)
+        distanza_veicle_piu_vicino = 200  # per ora ho messo 200 che sabbe la distanza massima di collisione tra i vecle sapendo che sono tutti uguali, in futuro si deve basare su quanto è grande il veicle più grande della simulazione
+        for i in range(self.numero_veicle_vicini):  # ogni frame controlla solo gli elementi vicini
+            g = self.veicle_vicini[i]
+            if g < numero_veicle: #nel caso qualche veicle sia morto nel frattempo
+                distanza = dist(self.x, self.y, veicle[g].x, veicle[g].y)
+                if distanza < distanza_veicle_piu_vicino:
+                    distanza_veicle_piu_vicino = distanza
+                    if distanza_veicle_piu_vicino < 200:
+                        for ii in range(veicle[g].DNA[0]): #per ogni componente del veicle nel raggio di collisione
+                            if veicle[g].block[ii].life > 0: #se ancora attivo
+                                if veicle[g].DNA[ii*3+3] == 3 or veicle[g].DNA[ii*3+3] == 4 or veicle[g].DNA[ii*3+3] == 5 or veicle[g].DNA[ii*3+3] == 6: #ed è una bocca
+                                    pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 2]  #e la sua posizione rispetto al veicolo
+                                    pos2y = veicle[g].y + math.cos(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 1] + math.cos(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 2]
+                                    if dist(self.x,self.y,pos2x,pos2y)<15*veicle[g].r: #è esattamente la posizione della massa nel raggio di dimensione del blocchetto
+                                        print("aaaaaaaaaaaaaaaaaaaaaa") #bhe per ora non succede niente, stampoa aaaaaaaa, in futuro la massa viene assorbita (sarebbe carino che in base alla dimensione del veicolo che mangia la assorbe più o meno lentamente)
+                                        print(g)
+
+
+    def show(self):
+        if zoom > 0.01 : #in futuro è da abbassare
+            j, k = SCHERMO.get_size()
+            X = (self.x + x) * zoom + j / 2
+            Y = (self.y + y) * zoom + k / 2
+            if X>0 and Y>0 and X<j and Y < k: #se l'oggetto non è sullo schermo allora non lo elabora
+                r = math.sqrt(self.mass/1000)
+                j, k = SCHERMO.get_size()
+                X = (self.x + x) * zoom + j / 2 #calcola le coordinate di dove stampare a schermo
+                Y = (self.y + y) * zoom + k / 2
+                pygame.draw.circle(SCHERMO, (200, 0, 0), (X, Y), zoom *15 * r, 0) #superficie, colore RGB, centro, raggio, spessore linea
+                if zoom > 0.4: #ottimizza la parte grafica, i dettagli si vedono solo quando ti avvicini
+                    pygame.draw.circle(SCHERMO, (100, 0, 0), (X, Y), zoom * 15 * r, int(zoom*2*self.mass/1000))
+                    pygame.draw.circle(SCHERMO, (150, 0, 0), (X, Y), zoom * 10 * r, 0) #il raggio è da sistemare, sarebbe da fare che sia la radice della massa perchè per ora a volte si generano masse davvero grandi se vengono da esserini grandi e da blocchetti con tanta massa tipo shell
+
+
+class nucleus: #parte centrale dell'esserino, se manca, muore
+    def __init__(self,xx,yy):
+        self.x = xx
+        self.y = yy
+        self.battito = 7
+        self.life = 1 #quanta vita ha in questo momento
+        self.r = 1 #area occupata dall blocchetto
+        self.impact_damage=1 #danno dato nell'urto
+        self.damage=0 #danno che non è di impatto (esempio veleno o morso)
+        self.mass = 1 #qunato pesa il blocchetto di base
+        self.energy = -1 #quanta energia consuma, ovviamente valori positvi la producono
+        self.max_life = 1 #vita massima che può avere
+        self.rigeneration_timer = 0 #quando arriva a 1000 il blocchetto inizia a rigenerarsi
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        self.battito += 0.3 #animazione del cuore che batte
+        if self.battito > 10:
+            self.battito = 5
+        target_rect = pygame.Rect(rect) #dice quanto è grande l'elemento target_rect
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA) #crea una base su cui disegnare (un quadrato di 15*zoom*size pixel per lato)
+        pygame.draw.polygon(shape_surf, (200,0,0), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], width) #disegna su shape_surf
+        if zoom>0.4:
+            pygame.draw.polygon(shape_surf, (100,0,0), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], int(5*zoom*size))
+            pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 5*zoom * size), (15*zoom * size, zoom * size * 12), (zoom * size * 25, zoom * 5 * size)], 0)
+            pygame.draw.polygon(shape_surf, (100, 0, 0),[(25*zoom * size, 5*zoom * size), (18*zoom * size, zoom * size * 15), (zoom * size * 25, zoom * 25 * size)], 0)
+            pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 25*zoom * size), (15*zoom * size, zoom * size * 18), (zoom * size * 25, zoom * 25 * size)], 0)
+            pygame.draw.polygon(shape_surf, (100, 0, 0),[(5*zoom * size, 5*zoom * size), (12*zoom * size, zoom * size * 15), (zoom * size * 5, zoom * 25 * size)], 0)
+            pygame.draw.circle(shape_surf, (50,10, 10), (15*zoom * size, 15*zoom * size), zoom * self.battito * size, 0)
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi) #ruota shape_surf
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y))) #stampa a video shape_surf
+
+
+class repulsion: #ancora non funziona ma quando attivo genera un inpulso che scaccia i proiettili e gli oggetti con bassa massa
+    def __init__(self,xx,yy):
+        self.life = 1
+        self.x = xx
+        self.y = yy
+        self.life = 2
+        self.r = 1
+        self.impact_damage=1
+        self.damage=0
+        self.mass = 1
+        self.energy = 0
+        self.max_life = 2
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (50,50,250,int(self.life/self.max_life*255)), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], width)
+        if zoom>0.4:
+            pygame.draw.polygon(shape_surf, (0,0,150,int(self.life/self.max_life*255)), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], int(5*zoom*size))
+            pygame.draw.polygon(shape_surf, (0, 0, 150,int(self.life/self.max_life*255)),[(5*zoom * size, 5*zoom * size), (15*zoom * size, zoom * size * 12), (zoom * size * 25, zoom * 5 * size)], 0)
+            pygame.draw.polygon(shape_surf, (0, 0, 150,int(self.life/self.max_life*255)),[(25*zoom * size, 5*zoom * size), (18*zoom * size, zoom * size * 15), (zoom * size * 25, zoom * 25 * size)], 0)
+            pygame.draw.polygon(shape_surf, (0, 0, 150,int(self.life/self.max_life*255)),[(5*zoom * size, 25*zoom * size), (15*zoom * size, zoom * size * 18), (zoom * size * 25, zoom * 25 * size)], 0)
+            pygame.draw.polygon(shape_surf, (0, 0, 150,int(self.life/self.max_life*255)),[(5*zoom * size, 5*zoom * size), (12*zoom * size, zoom * size * 15), (zoom * size * 5, zoom * 25 * size)], 0)
+            pygame.draw.circle(shape_surf, (10,10, 250,int(self.life/self.max_life*255)), (15*zoom * size, 15*zoom * size), zoom * 8, int(zoom * 5 *size))
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class leaf: #producono massa e energia, ma sono fragili
+    def __init__(self,xx,yy):
+        self.x = xx
+        self.y = yy
+        self.life = 1
+        self.r = 1
+        self.impact_damage=0.1
+        self.damage=0
+        self.mass = 0.1
+        self.energy = 1
+        self.max_life = 1
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        X =cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y
+        Y = cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y
+        pygame.draw.circle(SCHERMO, (0, 200, 0,int(self.life/self.max_life*255)), (X, Y), zoom *15 *size, 0)
+        if zoom > 0.4:
+            pygame.draw.circle(SCHERMO, (0, 100, 0,int(self.life/self.max_life*255)), (X, Y), zoom * 15*size, int(zoom*2*size))
+            pygame.draw.circle(SCHERMO, (0, 150, 0,int(self.life/self.max_life*255)), (X, Y), zoom * 10*size, 0)
+
+
+class mouth1: #produce massa anche a vuoto, quando va a contatto con la massa la assorbe istantaneamente e anche l'energia
+    def __init__(self,xx,yy):
+        self.x = xx
+        self.y = yy
+        self.bite = 0
+        self.open = True
+        self.life = 10
+        self.r = 1
+        self.impact_damage=10
+        self.damage=10
+        self.mass = 1
+        self.energy = -1
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            self.bite += 0.5
+        else:
+            self.bite -= 0.5
+        if self.bite >= 8:
+            self.open = False
+        if self.bite <= 0:
+            self.open = True
+        X =cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y
+        Y = cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y
+        target_rect = pygame.Rect([0, 0, zoom*size*30, zoom*size*30])
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)), [(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0),(zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0), (zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.circle(shape_surf,(200,20,30,int(self.life/self.max_life*255)),(15*zoom*size,55*zoom*size),30*zoom*size,0)
+            pygame.draw.circle(shape_surf, (100, 20, 30,int(self.life/self.max_life*255)), (15 * zoom * size, 55 * zoom * size), 30 * zoom * size, int(2*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
+
+
+class mouth2:
+    def __init__(self,xx,yy):
+        self.x = xx
+        self.y = yy
+        self.bite = 0
+        self.open = True
+        self.life = 10
+        self.r = 1
+        self.impact_damage=10
+        self.damage=10
+        self.mass = 1
+        self.energy = -1
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            self.bite += 0.5
+        else:
+            self.bite -= 0.5
+        if self.bite >= 8:
+            self.open = False
+        if self.bite <= 0:
+            self.open = True
+        X =cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y
+        Y = cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y
+        target_rect = pygame.Rect([0, 0, zoom*size*30, zoom*size*30])
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)), [(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0),(zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0), (zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.circle(shape_surf,(200,20,30,int(self.life/self.max_life*255)),(15*zoom*size,55*zoom*size),30*zoom*size,0)
+            pygame.draw.circle(shape_surf, (100, 20, 30,int(self.life/self.max_life*255)), (15 * zoom * size, 55 * zoom * size), 30 * zoom * size, int(2*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, (angle+math.pi/2) * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
+
+
+class mouth3:
+    def __init__(self,xx,yy):
+        self.x = xx
+        self.y = yy
+        self.bite = 0
+        self.open = True
+        self.life = 10
+        self.r = 1
+        self.impact_damage=10
+        self.damage=10
+        self.mass = 1
+        self.energy = -1
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            self.bite += 0.5
+        else:
+            self.bite -= 0.5
+        if self.bite >= 8:
+            self.open = False
+        if self.bite <= 0:
+            self.open = True
+        X =cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y
+        Y = cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y
+        target_rect = pygame.Rect([0, 0, zoom*size*30, zoom*size*30])
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)), [(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0),(zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0), (zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.circle(shape_surf,(200,20,30,int(self.life/self.max_life*255)),(15*zoom*size,55*zoom*size),30*zoom*size,0)
+            pygame.draw.circle(shape_surf, (100, 20, 30,int(self.life/self.max_life*255)), (15 * zoom * size, 55 * zoom * size), 30 * zoom * size, int(2*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, (angle+math.pi) * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
+
+
+class mouth4:
+    def __init__(self,xx,yy):
+        self.x = xx
+        self.y = yy
+        self.bite = 0
+        self.open = True
+        self.life = 10
+        self.r = 1
+        self.impact_damage=10
+        self.damage=10
+        self.mass = 1
+        self.energy = -1
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            self.bite += 0.5
+        else:
+            self.bite -= 0.5
+        if self.bite >= 8:
+            self.open = False
+        if self.bite <= 0:
+            self.open = True
+        X =cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y
+        Y = cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y
+        target_rect = pygame.Rect([0, 0, zoom*size*30, zoom*size*30])
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        pygame.draw.polygon(shape_surf, (100, 50, 50,int(self.life/self.max_life*255)), [(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0),(zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], 0)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(zoom * size * 30, zoom * size * 30), (zoom * size * 23-zoom * size *self.bite, 0), (zoom * size * 20-zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.polygon(shape_surf, (50, 20, 20,int(self.life/self.max_life*255)),[(0, zoom * size * 30), (zoom * size * 7+zoom * size *self.bite, 0), (zoom * size * 10+zoom * size *self.bite/2, zoom * size * 20),(zoom * size * 15, zoom * size * 30)], int(2*zoom*size))
+            pygame.draw.circle(shape_surf,(200,20,30,int(self.life/self.max_life*255)),(15*zoom*size,55*zoom*size),30*zoom*size,0)
+            pygame.draw.circle(shape_surf, (100, 20, 30,int(self.life/self.max_life*255)), (15 * zoom * size, 55 * zoom * size), 30 * zoom * size, int(2*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, (angle+3*math.pi/2) * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
+
+
+class shell: #semplicemente come uno scuto è molto resistente
+    def __init__(self,xx,yy):
+        self.life = 30
+        self.x = xx
+        self.y = yy
+        self.r = 1
+        self.impact_damage=1
+        self.damage=0
+        self.mass = 3
+        self.energy = 0
+        self.max_life = 30
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (200,200,200,int(self.life/self.max_life*255)), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], width)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (100, 100, 100,int(self.life/self.max_life*255)),[(0, 0), (0, zoom * size * 30), (zoom * size * 30, zoom * size * 30),(zoom * size * 30, 0)], int(5*zoom))
+            pygame.draw.polygon(shape_surf, (150, 150, 150,int(self.life/self.max_life*255)),[( zoom * size * 5,  zoom * size * 5), (zoom * size * 25, zoom * size * 5), (zoom * size * 25, zoom * size * 25),(zoom * size * 5,  zoom * size * 25)], 0)
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class sensor: #avrà degli input da dare alla AI, secondo me si può fare che non deve per foza essere attacato a un altro blocchetto, ma a una certa distanza
+    def __init__(self,xx,yy):
+        self.life = 1
+        self.x = xx
+        self.y = yy
+        self.r = 0.5
+        self.impact_damage=0.5
+        self.damage=0
+        self.mass = 0.5
+        self.energy = -0.5
+        self.max_life = 1
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.circle(shape_surf,(150,150,150,int(self.life/self.max_life*255)),(15*zoom*size,15*zoom*size),8*zoom*size,0)
+        if zoom > 0.4:
+            pygame.draw.circle(shape_surf, (100, 100, 100,int(self.life/self.max_life*255)), (15 * zoom * size, 15 * zoom * size), 8 * zoom * size, int(2*zoom*size))
+            pygame.draw.circle(shape_surf, (200, 200, 200,int(self.life/self.max_life*255)), (15 * zoom * size, 15 * zoom * size), 5 * zoom * size, 0)
+            pygame.draw.circle(shape_surf, (0, 0, 0,int(self.life/self.max_life*255)), (15 * zoom * size, 15 * zoom * size), 3 * zoom * size, 0)
+            pygame.draw.line(SCHERMO,(150,150,150,int(self.life/self.max_life*255)),(cosox,cosoy),(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y),int(5*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class spike_1: #fa molto danno di impatto
+    def __init__(self,xx,yy):
+        self.life = 10
+        self.x = xx
+        self.y = yy
+        self.r = 0.5
+        self.impact_damage=10
+        self.damage=0
+        self.mass = 0.5
+        self.energy = 0
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (150,150,150,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], width)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (100,100,100,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], int(3*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class spike_2:
+    def __init__(self,xx,yy):
+        self.life = 10
+        self.x = xx
+        self.y = yy
+        self.r = 0.5
+        self.impact_damage=10
+        self.damage=0
+        self.mass = 0.5
+        self.energy = 0
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (150,150,150,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], width)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (100,100,100,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], int(3*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, (angle+math.pi/2) * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class spike_3:
+    def __init__(self,xx,yy):
+        self.life = 10
+        self.x = xx
+        self.y = yy
+        self.r = 0.5
+        self.impact_damage=10
+        self.damage=0
+        self.mass = 0.5
+        self.energy = 0
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (150,150,150,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], width)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (100,100,100,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], int(3*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, (angle+math.pi) * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class spike_4:
+    def __init__(self,xx,yy):
+        self.life = 10
+        self.x = xx
+        self.y = yy
+        self.r = 0.5
+        self.impact_damage=10
+        self.damage=0
+        self.mass = 0.5
+        self.energy = 0
+        self.max_life = 10
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (150,150,150,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], width)
+        if zoom > 0.4:
+            pygame.draw.polygon(shape_surf, (100,100,100,int(self.life/self.max_life*255)), [(zoom*size*20,zoom*size*30),(zoom*size*10,zoom*size*30),(zoom*size*15,0)], int(3*zoom*size))
+        rotated_surf = pygame.transform.rotate(shape_surf, (angle+3*math.pi/2) * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class sail_1: #genera delle forze per simulare le correnti
+    def __init__(self,xx,yy):
+        self.life = 2
+        self.x = xx
+        self.y = yy
+        self.open = True
+        self.r = 3
+        self.impact_damage=0.5
+        self.damage=0
+        self.mass = 1
+        self.energy = 0
+        self.max_life = 2
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            target_rect = pygame.Rect([0,0,zoom*size*90,zoom*size*90])
+            shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+            pygame.draw.polygon(shape_surf, (150,0,150,int(self.life/self.max_life*255)), [(zoom*size*45,zoom*size*90),(0,zoom*size*30),(zoom*size*90,zoom*size*30)], width)
+            if zoom > 0.4:
+                pygame.draw.polygon(shape_surf, (100, 0, 200,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], int(3*size*zoom))
+                pygame.draw.polygon(shape_surf, (150, 0, 150,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], int(3*size*zoom))
+                pygame.draw.polygon(shape_surf, (200, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0),(zoom * size * 75, 0)], 0)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0), (zoom * size * 75, 0)],int(3 * size * zoom))
+            rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
+            surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class sail_2:
+    def __init__(self, xx, yy):
+        self.life = 2
+        self.x = xx
+        self.y = yy
+        self.open = True
+        self.r = 3
+        self.impact_damage=0.5
+        self.damage=0
+        self.mass = 1
+        self.energy = 0
+        self.max_life = 2
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            target_rect = pygame.Rect([0, 0, zoom * size * 90, zoom * size * 90])
+            shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+            pygame.draw.polygon(shape_surf, (150, 0, 150,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], width)
+            if zoom > 0.4:
+                pygame.draw.polygon(shape_surf, (100, 0, 200,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], int(3 * size * zoom))
+                pygame.draw.polygon(shape_surf, (150, 0, 150,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], int(3 * size * zoom))
+                pygame.draw.polygon(shape_surf, (200, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0),(zoom * size * 75, 0)], 0)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0),(zoom * size * 75, 0)], int(3 * size * zoom))
+            rotated_surf = pygame.transform.rotate(shape_surf, (angle + math.pi / 2) * 180 / math.pi)
+            surface.blit(rotated_surf, rotated_surf.get_rect(center=(
+            cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,
+            cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
+
+
+class sail_3:
+    def __init__(self, xx, yy):
+        self.life = 2
+        self.x = xx
+        self.y = yy
+        self.open = True
+        self.r = 3
+        self.impact_damage=0.5
+        self.damage=0
+        self.mass = 1
+        self.energy = 0
+        self.max_life = 2
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            target_rect = pygame.Rect([0, 0, zoom * size * 90, zoom * size * 90])
+            shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+            pygame.draw.polygon(shape_surf, (150, 0, 150,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], width)
+            if zoom > 0.4:
+                pygame.draw.polygon(shape_surf, (100, 0, 200,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], int(3 * size * zoom))
+                pygame.draw.polygon(shape_surf, (150, 0, 150,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], int(3 * size * zoom))
+                pygame.draw.polygon(shape_surf, (200, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0),(zoom * size * 75, 0)], 0)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0),(zoom * size * 75, 0)], int(3 * size * zoom))
+            rotated_surf = pygame.transform.rotate(shape_surf, (angle + math.pi) * 180 / math.pi)
+            surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
+
+
+class sail_4:
+    def __init__(self, xx, yy):
+        self.life = 2
+        self.x = xx
+        self.y = yy
+        self.open = True
+        self.r = 3
+        self.impact_damage=0.5
+        self.damage=0
+        self.mass = 1
+        self.energy = 0
+        self.max_life = 2
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        if self.open:
+            target_rect = pygame.Rect([0, 0, zoom * size * 90, zoom * size * 90])
+            shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+            pygame.draw.polygon(shape_surf, (150, 0, 150,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], width)
+            if zoom > 0.4:
+                pygame.draw.polygon(shape_surf, (100, 0, 200,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 60),(zoom * size * 90, zoom * size * 60)], int(3 * size * zoom))
+                pygame.draw.polygon(shape_surf, (150, 0, 150,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], width)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (0, zoom * size * 30),(zoom * size * 90, zoom * size * 30)], int(3 * size * zoom))
+                pygame.draw.polygon(shape_surf, (200, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0),(zoom * size * 75, 0)], 0)
+                pygame.draw.polygon(shape_surf, (100, 0, 100,int(self.life/self.max_life*255)),[(zoom * size * 45, zoom * size * 90), (zoom * size * 15, 0),(zoom * size * 75, 0)], int(3 * size * zoom))
+            rotated_surf = pygame.transform.rotate(shape_surf, (angle + 3*math.pi/2) * 180 / math.pi)
+            surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox + math.sin(angle) * zoom * size * 30 * self.x + math.sin(angle + math.pi / 2) * zoom * size * 30 * self.y,cosoy + math.cos(angle) * zoom * size * 30 * self.x + math.cos(angle + math.pi / 2) * zoom * size * 30 * self.y)))
+
+
+class stomach: #mette da parte l'energia non utilizzata
+    def __init__(self,xx,yy):
+        self.life = 3
+        self.x = xx
+        self.y = yy
+        self.r = 1
+        self.energy_stored = 800 #energia storata inizialmente (in modo che chi è appena nato e non ha le foglie possa muoversi)
+        self.impact_damage=1
+        self.damage=0
+        self.mass = 2
+        self.energy = 0
+        self.max_life = 3
+        self.rigeneration_timer = 0
+
+
+    def draw(self, surface, rect, size, angle, width, cosox, cosoy):
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shape_surf, (150,150,0,int(self.life/self.max_life*255)), [(0,0),(0,zoom*size*30),(zoom*size*30,zoom*size*30),(zoom*size*30,0)], width)
+        if zoom > 0.4:
+            pygame.draw.circle(shape_surf, (200, 200, 0,int(self.life/self.max_life*255)), (15 * zoom * size, 15 * zoom * size), zoom * size * 15 * self.energy_stored/1000, 0)
+            pygame.draw.polygon(shape_surf, (100, 100, 0,int(self.life/self.max_life*255)),[(0, 0), (0, zoom * size * 30), (zoom * size * 30, zoom * size * 30),(zoom * size * 30, 0)], int(5*zoom))
+            #pygame.draw.polygon(shape_surf, (150, 150, 0),[( zoom * size * 5,  zoom * size * 5), (zoom * size * 25, zoom * size * 5), (zoom * size * 25, zoom * size * 25),(zoom * size * 5,  zoom * size * 25)], 0)
+        rotated_surf = pygame.transform.rotate(shape_surf, angle * 180 / math.pi)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=(cosox+math.sin(angle)*zoom*size*30*self.x+math.sin(angle+math.pi/2)*zoom*size*30*self.y, cosoy+math.cos(angle)*zoom*size*30*self.x+math.cos(angle+math.pi/2)*zoom*size*30*self.y)))
+
+
+class Veicle:
+    def __init__(self, xp, yp, r, xforce, yforce, DNA,id_ancestor):
+        self.age = r*100 #età che ha il veicolo, se supera una soglia muore di vecchiaia, ora si basa su r che sarebbe un parametro che ne determina la dimensione in modo che a inizio simulazione non muoiono tutti assieme dopo un tot di tempo, dovrà essere modifiacato
+        self.x = xp
+        self.y = yp
+        self.r = (r + random.randint(-100, 100)) / 1000 + 1 #possiamo dire che determina le dimensioni del veicolo, r sta per raggio (ancora da quando nella simulazione i veicle erano dei cerchi)
+        self.vx = 0 #velocità sull'asse x
+        self.vy = 0 #velocità sull'asse y
+        self.v = 0 #velocità
+        self.life = 1 #semplicemente un valore che non deve essere 0, altrimenti vuol dire che il veicle è morto
+        self.xforce = xforce #forza applicata sull'asse x
+        self.yforce = yforce #forza applicata sull'asse y
+        self.ax = 0 #accellerazione sull'asse x
+        self.ay = 0 #accellerazione sull'asse y
+        self.friction = 0 #atrito
+        self.weight = 0 #massa totale del veicle, viene calcolata in seguito
+        self.angle = random.uniform(-math.pi, math.pi) #la direzione
+        self.spawn_range = 1000 #range dove può nascere un "figlio", in futuro verrà determonato da un altro DNA
+        self.sail = 0 #numero di vele, viene calcolato dopo
+        self.numero_stomach = 0 #numero di stomaci, viene calcolato dopo
+        self.numero_leaf = 0 #numero foglie
+        self.numero_mouth = 0 #numero bocche
+        self.stomach = []
+        self.block = []
+        for i in range(DNA[0]):#il primo elemento del DNA dice qunti blocchetti ci sono
+            if DNA[i * 3 + 3] == 0: #poi ogni 3 dati uno dice il tipo di blocchetto
+                self.block.append(nucleus(DNA[i*3+1], DNA[i*3+2])) #(DNA[i*3+1], DNA[i*3+2]) sono le posizioni x e y dell blocchetto sul veicle
+            if DNA[i * 3 + 3] == 1:
+                self.block.append(leaf(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.numero_leaf += 1
+            if DNA[i * 3 + 3] == 2:
+                self.block.append(shell(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 3:
+                self.block.append(mouth1(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.numero_mouth += 1
+            if DNA[i * 3 + 3] == 4:
+                self.block.append(mouth2(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.numero_mouth += 1
+            if DNA[i * 3 + 3] == 5:
+                self.block.append(mouth3(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.numero_mouth += 1
+            if DNA[i * 3 + 3] == 6:
+                self.block.append(mouth4(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.numero_mouth += 1
+            if DNA[i * 3 + 3] == 7:
+                self.block.append(spike_1(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 8:
+                self.block.append(spike_2(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 9:
+                self.block.append(spike_3(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 10:
+                self.block.append(spike_4(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 11:
+                self.block.append(repulsion(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 12:
+                self.block.append(sensor(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 13:
+                self.block.append(sail_1(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.sail += 1
+            if DNA[i * 3 + 3] == 14:
+                self.block.append(sail_2(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.sail += 1
+            if DNA[i * 3 + 3] == 15:
+                self.sail += 1
+                self.block.append(sail_3(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+            if DNA[i * 3 + 3] == 16:
+                self.block.append(sail_4(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.sail +=1
+            if DNA[i * 3 + 3] == 17:
+                self.block.append(stomach(DNA[i * 3 + 1], DNA[i * 3 + 2]))
+                self.numero_stomach += 1
+                self.stomach.append(i)
+            self.weight += self.block[i].mass#massa totale del veicolo base
+        self.mass = self.weight*self.r*self.r #massa effettiva
+        self.energy = 0 #quanta energia possiede il veicolo
+        self.DNA = DNA
+        self.timer_ottimizazzione = random.randint(0, 100)
+        self.max_speed = 10 #ora è un valore a caso ma sarebbe la velocità massuima che può raggiungere, serve per sapere il raggio di spazio in cui può stare in un determinato tempo
+        self.numero_veicle_vicini = 0 #numero veicle nel range in cui puo essere nel tempo di ottimizazzione (100 frame)
+        self.veicle_vicini = []
+        self.id_collision_detection = 1000000 #quando diverso da 1000000 dice id del veicolo con cui si sta collidendo in modo che uno solo dei due veicle calcoli l'urto
+        self.collision_detection = True #se True sta collidendo con un veicolo
+        self.move_check = False #serve per capire se il veicolo si sta muovendo e se ha senso calcolare la vista
+        self.torsion_force = random.randint(-1,1)
+        self.velocita_angolare = 0
+        self.direzzione_corrente = random.uniform(-math.pi, math.pi)
+        self.torsione_corrente = random.uniform(-1, 1)
+        self.rigeneration = False
+        self.id_ancestor = id_ancestor #questo è insufficente per fare l'albero genealogico ma ci lavorerò i prossimi giorni
+
+
+    def move(self):
+        global numero_veicle
+        self.xforce = 0
+        self.yforce = 0
+        self.torsion_force = 0
+        somma = 0
+        for i in range(self.DNA[0]):
+            if self.block[i].life < self.block[i].max_life:
+                self.block[i].rigeneration_timer += velocita
+                self.rigeneration = True
+                somma = -0.5*velocita #consuma energia per rigenerarsi
+                if self.block[i].rigeneration_timer>1000: #aspetta 1000 frame prima di ricomparire
+                    self.block[i].life += 0.002*velocita
+                    if self.block[i].life >= self.block[i].max_life:
+                        self.block[i].life = self.block[i].max_life
+                        self.rigeneration = False
+                        self.block[i].rigeneration_timer = 0 #resetta il timer per una futura rigenerazione
+                        if self.block[i].r == 3: #se il blocchetto rigenerato è una vela
+                            self.sail += 1 #rimette il numero di vele a posto, viene messo a 0 nella funzione collisione
+        self.age += velocita #invecchia
+        self.mass = self.weight*self.r*self.r #la massa cresce in base al raggio
+        for i in range(self.DNA[0]):
+            if self.block[i].life > 0:
+                somma = somma + self.block[i].energy*velocita #controlla il consumo di energia
+        if somma<0: #se sta perdendo energia la prende dagli stomaci
+            #print("aiuto")
+            for i in range(self.numero_stomach):
+                if self.block[self.stomach[i]].life > 0:
+                    if self.block[self.stomach[i]].energy_stored > 0:
+                        self.block[self.stomach[i]].energy_stored += somma/self.numero_stomach
+                        somma = 0
+        else: #altrimenti la mette da parte
+            for i in range(self.numero_stomach):
+                if self.block[self.stomach[i]].life > 0:
+                    if self.block[self.stomach[i]].energy_stored < 1000:
+                        self.block[self.stomach[i]].energy_stored += somma/self.numero_stomach
+                        somma = 0
+        self.energy = somma
+        if self.sail>0:
+            self.direzzione_corrente += random.uniform(-0.1, 0.1)
+            if self.direzzione_corrente >= 2*math.pi or self.direzzione_corrente < -2*math.pi:
+                self.direzzione_corrente = 0
+            self.torsione_corrente += random.uniform(-0.05, 0.05)
+            if self.torsione_corrente>1:
+                self.torsione_corrente=1
+            if self.torsione_corrente<-1:
+                self.torsione_corrente=-1
+            self.xforce = self.xforce + math.cos(self.direzzione_corrente) * self.sail #il calcolo fatto così è sbagliato, va assolutamente rifatto
+            self.yforce = self.yforce + math.sin(self.direzzione_corrente) * self.sail
+            self.torsion_force += self.torsione_corrente * self.sail
+        self.ax = self.xforce/ self.mass
+        self.ay = self.yforce/ self.mass
+        self.vx = self.vx + (self.ax - 0.01*math.sqrt(self.vx ** 2)*self.vx) * velocita
+        self.vy = self.vy + (self.ay - 0.01*math.sqrt(self.vy ** 2)*self.vy) * velocita
+        if self.vx < 0.05 and self.vx > -0.05: #in questo modo non calcola spostamenti piccoli e inutili
+            self.vx = 0
+        if self.vy < 0.05 and self.vy > -0.05:
+            self.vy = 0
+        #self.d = math.atan2(self.yforce, self.xforce) #roba vecchia e sbagliaa
+        self.x = self.x + self.vx * velocita
+        self.y = self.y + self.vy * velocita
+        if self.vx > 100 or self.vx < -100: #a volte per a formula self.vx = self.vx + (self.ax - 0.01*math.sqrt(self.vx ** 2)*self.vx) * velocita, vx diventa troppo grande e da errore, è da sistemare, per ora il veicolo semplicemente muore
+            self.life = 0
+            print("ciao")
+            print(self.vx)
+        if self.vy > 100 or self.vy < -100:
+            self.life = 0
+            print("wow")
+        self.v = math.sqrt(self.vx**2+self.vy**2)
+        if self.vx != 0 or self.vy != 0: #controlla se si sta muovendo
+            self.move_check = True
+        else:
+            self.move_check = False
+            self.timer_ottimizazzione = 100
+        if self.energy < 0:
+            print("energy")
+            self.life = 0
+        if self.age>100000:
+            print("minchia")
+            self.life = 0
+        if self.block[0].life <= 0: #se manca il blocco principale il veicle muore
+            self.life = 0
+            print("miao")
+        #if self.r < 2:
+            #self.r += 0.0001 * velocita
+        self.velocita_angolare += (self.torsion_force/self.mass*0.1-1000*self.r*math.sqrt(self.velocita_angolare**2)*(self.velocita_angolare+0.001))*0.01
+        self.angle += self.velocita_angolare*velocita
+        if self.r >= 2: #raggiunta una certa dimensione si riproduce
+            self.r = 2
+            if numero_veicle < 1000:
+                new_veicle(self.x, self.y, 0, self.spawn_range, self.DNA,self.id_ancestor)#per ora il DNA viene copiato uguale, bisogna aggiungere delle mutazioni
+                numero_veicle += 1
+                self.r -= (self.r/2)**2/self.r
+
+
+    def see(self,id):
+        if self.move_check or self.collision_detection: #si attiva solo se si muove, se un altro veicle gli dice che stanno collidendo e il primo frame di vita
+            self.timer_ottimizazzione += 1
+            self.see_veicle(id) #vede gli altri veicle
+            self.see_bordi() #non sbatte contro i bordi
+            if self.timer_ottimizazzione >= 100:
+                self.timer_ottimizazzione = 0
+
+
+    def see_veicle(self,id):
+        self.id_collision_detection = 1000000
+        if self.timer_ottimizazzione >= 100: #ogni 100 frame guarda tutti i veicoli della simulazione e li mette in una lista
+            self.numero_veicle_vicini = 0
+            self.veicle_vicini = []
+            for i in range(numero_veicle):
+                if i != id:
+                    distanza = dist(self.x, self.y, veicle[i].x, veicle[i].y)
+                    if distanza < (100 * velocita * self.max_speed + 500):
+                        self.numero_veicle_vicini += 1
+                        self.veicle_vicini.append(i)
+        distanza_veicle_piu_vicino = 400 #per ora ho messo 400 che sabbe la distanza massima di collisione tra i vecle sapendo che sono tutti uguali, in futuro si deve basare su quanto è grande il veicle più grande della simulazione
+        g = 1000000
+        for i in range(self.numero_veicle_vicini): #ogni frame controlla solo gli elementi vicini
+            g = self.veicle_vicini[i]
+            if g < numero_veicle:
+                if g != id:
+                    distanza = dist(self.x, self.y, veicle[g].x, veicle[g].y)
+                    if distanza < distanza_veicle_piu_vicino:
+                        #pianta_piu_vicina = g
+                        distanza_veicle_piu_vicino = distanza
+                        #if distanza_pianta_piu_vicina < 200*self.sense: #robe vecchie
+                            #self.d = self.d + (math.atan2(veicle[pianta_piu_vicina].y - self.y, veicle[pianta_piu_vicina].x - self.x) - self.d)
+                        if distanza_veicle_piu_vicino < 400:
+                            self.id_collision_detection = g
+                            #self.collision_detection = True
+                            #for ii in range(self.DNA[0]):
+                                #if self.block[ii].collision_detection(pianta_piu_vicina,self.x,self.y,-self.angle,self.r):
+                                    #self.life = 0
+
+
+    def see_bordi(self):
+        if self.x > map_x_size/2:
+            self.vx = -self.vx #inverte la velocità (rimbalza), sarebbe da fare che cambia direzione perchè altrimenti continua a sbattere
+            self.x = self.x + self.vx * velocita
+            self.torsion_force = 0
+            self.xforce = 0
+            self.ax = 0
+        if self.y > map_y_size/2:
+            self.vy = -self.vy
+            self.y = self.y + self.vy * velocita
+            self.torsion_force = 0
+            self.yforce = 0
+            self.ay = 0
+        if self.x < -map_x_size/2:
+            self.vx = -self.vx
+            self.x = self.x + self.vx * velocita
+            self.torsion_force = 0
+            self.xforce = 0
+            self.ax = 0
+        if self.y < -map_y_size/2:
+            self.vy = -self.vy
+            self.y = self.y + self.vy * velocita
+            self.torsion_force = 0
+            self.yforce = 0
+            self.ay = 0
+        if self.x > map_x_size/2+10: #se esce dai bordi muore
+            self.life = 0
+        if self.y > map_y_size/2+10:
+            self.life = 0
+        if self.x < -map_x_size/2-10:
+            self.life = 0
+        if self.y < -map_y_size/2-10:
+            self.life = 0
+
+    def show(self):
+        if zoom > 0.01 : #in futuro è da abbassare
+            j, k = SCHERMO.get_size()
+            X = (self.x + x) * zoom + j / 2
+            Y = (self.y + y) * zoom + k / 2
+            if X>0 and Y>0 and X<j and Y < k:
+                if self.collision_detection:
+                    pygame.draw.circle(SCHERMO, (255, 0, 0), (X, Y), zoom*(400), 2) #diventa rosso quando avviene un impatto
+                else:
+                    pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom * (400), 2) #verde altrimenti
+                #pygame.draw.circle(SCHERMO, (0, 155, 0), (X, Y), 2 * zoom * 50, 0)
+                for i in range(self.DNA[0]):
+                    #if self.DNA[i*3+3] == 12: #roba strana
+                        #pygame.draw.line(SCHERMO, (150, 150, 150), (X, Y), (X + math.sin(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.sin(self.angle + math.pi / 2) * zoom * self.r * 30 * self.DNA[i*3+2],Y + math.cos(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.cos(self.angle + math.pi / 2) * zoom * self.r * 30 *self.DNA[i*3+2]), int(5 * zoom * self.r))
+                    if self.block[i].life>0:
+                        self.block[i].draw(SCHERMO, [0, 0, zoom*self.r*30, zoom*self.r*30], self.r, self.angle, 0, X, Y)
+                #A = FONT1.render(str(self.id_collision_detection), True, (0, 0, 0)) #dati utili da stampare a video per fare le varie prove
+                #SCHERMO.blit(A, (X, Y-45))
+                #B = FONT1.render(str(id), True, (0, 0, 0))
+                #SCHERMO.blit(B, (X, Y-30))
+                #C = FONT1.render(str(self.move_check), True, (0, 0, 0))
+                #SCHERMO.blit(C, (X, Y-15))
+                #D = FONT1.render(str(self.vx), True, (0, 0, 0))
+                #SCHERMO.blit(D, (X, Y))
+                #E = FONT1.render(str(self.vy), True, (0, 0, 0))
+                #SCHERMO.blit(E, (X, Y+15))
+                #F = FONT1.render(str(self.numero_veicle_vicini), True, (0, 0, 0))
+                #SCHERMO.blit(F, (X, Y+30))
+                #numero = FONT1.render(str(self.numero_veicle_vicini), True, (0, 0, 0))
+                #SCHERMO.blit(numero, (X, Y))
+
+
+class Ancestor: #salta pure questa classe è ancora in fase di costruzione
+    def __init__(self,sample,epoch,pos_y):
+        self.epoch = epoch
+        self.ancestor = sample.id_ancestor
+        self.sample = sample
+        self.sample.x = 0
+        self.sample.y = 0
+
+
+    def show(self):
+        self.sample.show()
+
+
+def show_bordi(): #disegna i bordi in modo efficente
+    j, k = SCHERMO.get_size()
+    if x > map_x_size/2-j/(2*zoom):
+        pygame.draw.rect(SCHERMO,(100,100,100),(0,0,int((-map_x_size/2 + x) * zoom + j / 2),k))
+    if y > map_y_size/2-k/(2*zoom):
+        pygame.draw.rect(SCHERMO,(100,100,100),(0,0,j,int((-map_y_size/2 + y) * zoom + k / 2)))
+    if x < -map_x_size / 2 + j / (2 * zoom):
+        pygame.draw.rect(SCHERMO,(100,100,100),(int(j + ((map_x_size/2 + x) * zoom - j / 2)),0,j,k))
+    if y < -map_y_size / 2 + k / (2 * zoom):
+        pygame.draw.rect(SCHERMO,(100,100,100),(0,int(k + ((map_y_size/2 + y) * zoom - k / 2)),j,k))
+
+
+def delete_veicle(ii):
+    global numero_veicle,numero_mass,mass
+    massa = 0
+    numero_blocchetti = 0
+    for i in range(veicle[ii].DNA[0]): #per ogni blocchetto morto genera una quantità di massa proporzionale alla massa del blocchetto
+        if veicle[ii].block[i].life>0:
+            massa += veicle[ii].block[i].mass
+            numero_blocchetti += 1
+    mass.append(Mass(veicle[ii].x, veicle[ii].y, massa * 1000 * veicle[ii].r * veicle[ii].r,numero_blocchetti))
+    numero_mass += 1
+    veicle[ii]=veicle[numero_veicle - 1] #sostituisce il veicle morto con lultimo veicle dell ì'array
+    veicle.pop(numero_veicle - 1) #elimina l'ultimo elemanto dell'array, non ricordo perchè ma questa operazione mi evitava problemi
+
+
+def delete_mass(i): #elimina la massa dal sistema
+    mass[i]=mass[numero_mass - 1]
+    mass.pop(numero_mass - 1)
+
+
+def new_veicle(xp, yp, r, spawn_range,DNA,id_ancestor):
+    global veicle_totali
+    xv = xp + random.randint(-spawn_range, spawn_range)
+    yv = yp + random.randint(-spawn_range, spawn_range)
+    veicle.append(Veicle(xv, yv, r, 0, 0, DNA,id_ancestor))
+    veicle_totali += 1
+
+
+def collision_detection(id1,id2):
+    global numero_mass
+    xx=veicle[id1].x
+    yy=veicle[id1].y
+    g=id2
+    angle=veicle[id1].angle
+    size=veicle[id1].r
+    for ii in range(veicle[id1].DNA[0]):
+        if veicle[id1].block[ii].life > 0:
+            pos1x = xx + math.sin(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.sin(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2] #posizione esatta del impatto calcolata con le coordinate del blocchetto che rileva la collisione rispetto al veicle 1
+            pos1y = yy + math.cos(angle) * size * 30 * veicle[id1].DNA[ii*3+1] + math.cos(angle + math.pi / 2) * size * 30 * veicle[id1].DNA[ii*3+2]
+            for i in range(veicle[g].DNA[0]):
+                if veicle[id2].block[i].life > 0:
+                    pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]#posizione esatta del impatto calcolata con le coordinate del blocchetto che rileva la collisione rispetto al veicle 2
+                    pos2y = veicle[g].y + math.cos(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[i*3+1] + math.cos(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[i*3+2]
+                    if dist(pos1x,pos1y,pos2x,pos2y) <= size * 15 * veicle[id1].block[ii].r + veicle[g].r * 15 * veicle[id2].block[i].r : #verifica se i 2 esserini si stanno collidendo
+                        #if veicle[id1].block[ii]==sail_1 or veicle[id1].block[ii]==sail_2 or veicle[id1].block[ii]==sail_3 or veicle[id1].block[ii]==sail_4:
+                        m1 = veicle[id1].mass
+                        m2 = veicle[id2].mass
+                        vx1 = veicle[id1].vx
+                        vx2 = veicle[id2].vx
+                        vy1 = veicle[id1].vy
+                        vy2 = veicle[id2].vy
+                        r1 = math.sqrt((pos1x - xx) ** 2 + (pos1y - yy) ** 2)
+                        r2 = math.sqrt((pos2x - veicle[g].x) ** 2 + (pos2y - veicle[g].y) ** 2)
+                        w1 = veicle[id1].velocita_angolare
+                        w2 = veicle[id2].velocita_angolare
+                        a1 = veicle[id1].angle
+                        a2 = veicle[id2].angle
+                        vtx1 = vx1 + w1 * r1 * math.sin(a1)
+                        vtx2 = vx2 + w2 * r2 * math.sin(a2)
+                        vty1 = vy1 + w1 * r1 * math.cos(a1)
+                        vty2 = vy2 + w2 * r2 * math.cos(a2)
+                        vfx1 = (m1 - m2) * vtx1 / (m1 + m2) + 2 * m2 * vtx2 / (m1 + m2)
+                        vfx2 = (m1 - m2) * vtx2 / (m1 + m2) + 2 * m2 * vtx1 / (m1 + m2)
+                        vfy1 = (m1 - m2) * vty1 / (m1 + m2) + 2 * m2 * vty2 / (m1 + m2)
+                        vfy2 = (m1 - m2) * vty2 / (m1 + m2) + 2 * m2 * vty1 / (m1 + m2)
+                        #velocita_inpattox=vx1+w1*r1*math.sin(a1)-(vx2+w2*r2*math.sin(a2))
+                        #velocita_inpattoy = vy1 + w1 * r1 * math.cos(a1) - (vy2 + w2 * r2 * math.cos(a2))
+                        #Ti=m1*v1 + r1*m1*w1 + m2*v2 + r2*m2*w2
+                        #Ei=0.5*m1*r1**2*w1**2+0.5*m1*v1**2+0.5*m2*r2**2*w2**2+0.5*m2*v2**2
+                        #delta=4*Ti**2*m2**2-4*(m2**2+m1*m2)*(Ti**2-2*Ei*m1)
+                        #if delta < 0:
+                            #delta = -delta
+                        #v2=2*Ti*m2/(2*m2**2+2*m1*m2)
+                        #v1=(Ti-m2*v2)/m1
+                        #print(v2)
+                        #angolo=math.atan2(yy-veicle[g].y,xx-veicle[g].x)
+                        #veicle[id1].d = angolo
+                        #veicle[id2].d = angolo+math.pi
+                        #veicle[id1].v = v1
+                        #veicle[id2].v = v2
+                        impatto = math.sqrt((vx1-vx2)**2+(vy1-vy2)**2)*(m1+m2) #calcola la forza del impatto
+                        #print(impatto/20*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage)
+                        veicle[id1].vx = vfx1
+                        veicle[id2].vx = vfx2
+                        veicle[id1].vy = vfy1
+                        veicle[id2].vy = vfy2
+                        #veicle[id1].xforce = - veicle[id1].xforce
+                        #veicle[id2].xforce = - veicle[id2].xforce
+                        #veicle[id1].yforce = - veicle[id1].yforce
+                        #veicle[id2].yforce = - veicle[id2].yforce
+                        veicle[id1].velocita_angolare = 0 #trasferisce tutta la velocità di rotazione in velocuìità di movimento
+                        veicle[id2].velocita_angolare = 0
+                        veicle[id1].block[ii].life -= impatto/40*veicle[id2].block[i].impact_damage+0.1+veicle[id2].block[i].damage #vengono danneggiati i blocchetti seguendo i vari fattori, come impatto,massa, danno di impatto e danno del blocchetto
+                        veicle[id2].block[i].life -= impatto/40*veicle[id1].block[ii].impact_damage+0.1+veicle[id1].block[ii].damage
+                        veicle[id1].xforce = 0
+                        veicle[id1].yforce = 0
+                        veicle[id2].xforce = 0
+                        veicle[id2].yforce = 0
+                        if veicle[id1].block[ii].life <= 0:
+                            mass.append(Mass(pos1x,pos1y,veicle[id1].block[ii].mass*1000*veicle[id1].r*veicle[id1].r,1)) #genera una massa dove è stato perso un blocchetto, ce un problema però, la massa viene creata svariati frame dopo l'impatto, cosa assolutamente da sistemare
+                            numero_mass += 1
+                            if veicle[id1].block[ii].r==3: #verifica che il blocchetto perso sia una vela
+                                veicle[id1].sail -= 1
+                                veicle[id1].torsion_force = 0
+                        if veicle[id2].block[i].life <= 0:
+                            mass.append(Mass(pos2x, pos2y, veicle[id2].block[i].mass*1000*veicle[id2].r*veicle[id2].r,1))
+                            numero_mass += 1
+                            if veicle[id2].block[i].r==3:
+                                veicle[id2].sail -= 1
+                                veicle[id2].torsion_force = 0
+
+
+def accensione(): #avvio della simulazione, ci sono 2 tasti che ti fanno scegliere se avvaire una nuova simulazione (verde a sinistra) o caricarne una gia fatta (arancione a destra[non funziona per ora])
+    SCHERMO = pygame.display.set_mode((400, 200))
+    while True:
+        for event in pygame.event.get(): #se succede un evento, esempio il mouse viene premuto
+            if event.type == pygame.QUIT: #e se viene premuta la x per uscire dal programma
+                pygame.quit() #pygame si chiude
+                sys.exit()
+        SCHERMO.fill((255, 255, 255))
+        pygame.draw.circle(SCHERMO, (50, 200, 100), (100, 100), 100, 0)
+        pygame.draw.circle(SCHERMO, (255, 100, 50), (300, 100), 100, 0)
+        Mx, My = pygame.mouse.get_pos() #controlla la posizione del mouse
+        if pygame.mouse.get_pressed()[0]:
+            if Mx < 200 and My < 200: #se il mouse viene premuto ed è nel primo cerchio
+                randomizazzione() #avvia randomizazzione, una funzione che genera tutti i dati della simulazione in modo random
+                inizializza() #trasforma i dati di randomizazzione in dati leggibili alla simulazione
+                break
+            if Mx > 200 and My < 200:
+                load() #carica i dati dai file salvati
+                inizializza() #trasforma questi dati in dati leggibili dalla simulazione
+                break
+        pygame.display.flip()
+        clock.tick(50) #questa schermata si aggiorna a 50 FPS frame per second
+
+
+def randomizazzione():
+    global veicle_info
+    global numero_veicle
+    numero_veicle = 900 #ora è fisso a 900, ricordo che per ora dentro a veicle ce una funzione che impedisce di riprodursi quando ci sono 1000 veicle
+    veicle_info = []
+    DNA = [14,0,0,0,1,0,5,-1,0,17,0,1,2,0,-1,2,0,2,1,0,3,1,0,-2,1,0,-3,1,-1,1,7,-1,-1,7,1,1,12,1,-1,12,-3,0,13] #DNA fatto a mano da me per creare un veicle sensato, ma l'obbiettivo è che i primi DNA siano random (ovvaimente seguendo una certa logica)
+    for i in range(numero_veicle): #genera le info per i veicle che per ora sono solo i DNA dei blocchetti, in futuro saranno molte più info
+        veicle_info.append([random.randint(int(-map_x_size / 2), int(map_x_size / 2)), random.randint(int(-map_y_size / 2), int(map_y_size / 2)), random.randint(0, 1000),0,DNA])
+
+
+def inizializza(): #prende tutte le info e avvia la simulazione
+    global numero_veicle,veicle_totali
+    global veicle
+    global veicle_info,massa_nel_sistema,massa_nel_sistema1,num_candidates_ancestor
+    veicle = []
+    for i in range(numero_veicle):
+        new_veicle(int(veicle_info[i][0]), int(veicle_info[i][1]), float(veicle_info[i][2]), int(veicle_info[i][3]), veicle_info[i][4],i) #crea nuovi veicle
+        veicle_totali += 1
+        for ii in range(veicle[i].DNA[0]):
+            massa_nel_sistema1 += veicle[i].block[ii].mass*1000*veicle[i].r*veicle[i].r #calcola la massa iniziale del sistema, che poi dovrà essere costante
+    massa_nel_sistema = massa_nel_sistema1
+    mass = []
+    for i in range(numero_veicle): #test per l'albero genealogico
+        candidates_ancestor.append(Ancestor(Veicle(0, 0, 1, 0, 0, veicle_info[i][4],i),0,0))
+    num_candidates_ancestor = numero_veicle
+
+
+def load(): #qua è tutto da sistemare, penso che il funzionamento si capisca ma mancano  altri dati essenziali da salvare e caricare
+    global veicle_info
+    global numero_veicle
+    global timer
+    numero_veicle = 0
+    with open("plant.csv") as f:
+        reader = csv.reader(f)
+        veicle_info = []
+        for riga in reader:
+            if not riga == []:
+                veicle_info.append(riga)
+                numero_veicle += 1
+    with open("caratteristiche mappa.csv") as f:
+        reader = csv.reader(f)
+        for riga in reader:
+            if not riga == []:
+                timer = int(riga[0])
+
+
+def save(): #si attiva schiacciando un pulsante in alto a sinistra, crea dei file csv con i dati dentro
+    caratteristiche_mappa = []
+    caratteristiche_mappa.append([int(timer), 0, 0, 0, 0, 0])
+    with open("caratteristiche mappa.csv", "w") as f:
+        writer = csv.writer(f)
+        writer.writerows(caratteristiche_mappa)
+    m = []
+    for i in range(numero_veicle):
+        m.append([int(veicle[i].x), int(veicle[i].y), float((veicle[i].r - 1) * 1000), int(i)])
+    with open("plant.csv", "w") as f:
+        writer = csv.writer(f)
+        writer.writerows(m)
+
+
+def simulation(): #parte principale, va sempre, anche quando la simulzione non è visualizzata, qiesta funzione viene chiamata a ogni frame quindi essenziale che sia efficente
+    global timer,numero_veicle,timer_ottimizazzione,numero_mass,mille,grafica,massa_libera_nel_sistema,numero_mouth
+    global numero_leaf,massa_per_oggetto,massa_nel_sistema,massa_nel_sistema1,differenza_massa,epoch_timer,epoch,num_candidates_ancestor
+    global candidates_ancestor,num_ancestor
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: #se schiacci spazio visualizzi o meno la simulazione
+            if grafica:
+                grafica = False
+                SCHERMO = pygame.display.set_mode((200, 200))
+            else:
+                grafica = True
+                SCHERMO = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    #print(numero_mass)
+    timer_ottimizazzione += 1
+    numero_leaf = 0
+    numero_mouth = 0
+    epoch_timer += velocita
+    #if epoch_timer>10000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
+        #print(num_candidates_ancestor)
+        #epoch_timer = 0
+        #epoch += 1
+        #for i in range(num_candidates_ancestor):
+            #for ii in range(numero_veicle):
+                #if veicle[ii].id_ancestor == candidates_ancestor[i].sample.id_ancestor:
+                    #ancestor.append(candidates_ancestor[i])
+                    #num_ancestor += 1
+        #for i in range(numero_veicle):
+            #veicle[i].id_ancestor = i
+        #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        #print(num_ancestor)
+        #print(numero_veicle)
+        #candidates_ancestor = []
+        #num_candidates_ancestor = 0
+        #for i in range(numero_veicle):
+            #candidates_ancestor.append(Ancestor(Veicle(0,0,1,0,0,veicle[i].DNA,veicle[i].id_ancestor),epoch,0))
+            #num_candidates_ancestor += 1
+    if timer_ottimizazzione>100:
+        #print(massa_per_oggetto)
+        timer_ottimizazzione = 0
+        massa_nel_sistema = 0
+        for i in range(numero_veicle):
+            numero_leaf += veicle[i].numero_leaf
+            numero_mouth += veicle[i].numero_mouth
+        if (numero_leaf+numero_mouth*2)>0:
+            massa_per_oggetto = massa_libera_nel_sistema / (numero_leaf + numero_mouth * 2) #calcola la massa assorbita per oggetto
+            massa_libera_nel_sistema = 0 #se la massa viene assorbita la massa libera che rimane è 0
+        for i in range(numero_veicle):
+            if not veicle[i].rigeneration:
+                veicle[i].r += (massa_per_oggetto * veicle[i].numero_leaf + massa_per_oggetto * veicle[i].numero_mouth * 2) / (1000 * veicle[i].r * veicle[i].weight) #i veicle che assorbono massa crescono
+            for ii in range(veicle[i].DNA[0]):
+                massa_nel_sistema += veicle[i].block[ii].mass*veicle[i].r*veicle[i].r*1000 #calcola la massa attuale nel sistema
+        for i in range(numero_mass):
+            massa_nel_sistema += mass[i].mass  #calcola la massa attuale nel sistema conatndo anche la massa nelle classi mass
+        differenza_massa = massa_nel_sistema1 - massa_nel_sistema #calcola la differenza di massa che dovrebbe esserci
+        print(massa_nel_sistema1 - massa_nel_sistema)
+    massa_libera_nel_sistema += differenza_massa/200 #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
+    for i in range(numero_mass):
+        mass[i].move(i) #calcola la massa, esempio il fatto che marcisca, poi ci sarebbe da mettere mass[i].see() per fare in modo che la massa veda i veicle (e non viceversa) per risparmiare ram
+        mass[i].see()
+    #print(timer)
+    #print(massa_per_oggetto)
+    for i in range(numero_veicle):
+        #print(veicle[i].r)
+        veicle[i].move()
+        veicle[i].see(i)
+        id = veicle[i].id_collision_detection
+        if not id >= numero_veicle:
+            if veicle[i].move_check:
+                if id != 1000000 and not veicle[id].collision_detection:
+                    veicle[i].collision_detection = True #queste righe di codice fanno in modo che l'impatto viene calcolato da uno solo dei 2 veicle coinvolti, per risparmiare ram e non sbaglaire i calcoli
+                    collision_detection(i,id)
+    for i in range(numero_veicle):
+        if veicle[i].life <= 0: #se un veicle ha la vita <=0 allora viene eliminato
+            numero_veicle -= 1 #prima si toglie uno dal numero di veicle
+    for i in range(numero_veicle):
+        #veicle[i].collision_detection = False
+        if veicle[i].life <= 0:
+            delete_veicle(i) #poi il veicle viene eliminato (questa operazione evita casini nel caso 2 veicle moiano assieme)
+    for i in range(numero_mass):
+        if mass[i].mass <= 0: #uguale per la massa
+            numero_mass -= 1
+    for i in range(numero_mass):
+        if mass[i].mass <= 0:
+            delete_mass(i)
+    grafico() #mette le nuove info nel grafico
+    timer += 1 * velocita #il tempo della simulazione viene aumentato per la velocità
+
+
+class Graphic_point: #classe che identifica i punti sui grafici
+    def __init__(self,x,y,color):
+        self.num = x
+        self.x = x
+        self.y = y
+        self.color = color
+    def show1(self): #ho dovuto fare show1 show2 ecc.. perchè...
+        j, k = SCHERMO.get_size()
+        X1 = self.x*(j-100)/150+100
+        Y1 = k-self.y*(k-200)/1000-100
+        X2 = graphic_point_numero_veicle[self.num - 1].x * (j - 100) / 150 + 100 #per disegnare le linee mi serve sapere il punto precedente quindi anche il tipo
+        Y2 = k - graphic_point_numero_veicle[self.num - 1].y * (k - 200) / 1000 - 100
+        pygame.draw.line(SCHERMO, self.color, (X2, Y2), (X1, Y1),5)
+        pygame.draw.circle(SCHERMO, self.color, (X1, Y1), 3, 0)
+
+    def show2(self):
+        j, k = SCHERMO.get_size()
+        X1 = self.x*(j-100)/150+100
+        Y1 = k-self.y*(k-200)/1000-100
+        X2 = graphic_point_numero_mass[self.num - 1].x * (j - 100) / 150 + 100
+        Y2 = k - graphic_point_numero_mass[self.num - 1].y * (k - 200) / 1000 - 100
+        pygame.draw.line(SCHERMO, self.color, (X2, Y2), (X1, Y1),5)
+        pygame.draw.circle(SCHERMO, self.color, (X1, Y1), 3, 0)
+
+
+    def show3(self):
+        j, k = SCHERMO.get_size()
+        X1 = self.x*(j-100)/150+100
+        Y1 = k-self.y*(k-200)/1000-100
+        X2 = graphic_point_massa_per_oggetto[self.num - 1].x * (j - 100) / 150 + 100
+        Y2 = k - graphic_point_massa_per_oggetto[self.num - 1].y * (k - 200) / 1000 - 100
+        pygame.draw.line(SCHERMO, self.color, (X2, Y2), (X1, Y1),5)
+        pygame.draw.circle(SCHERMO, self.color, (X1, Y1), 3, 0)
+
+
+def grafico():
+    global pointTime,graphic_Time,graphic_point_numero_veicle,num_graphic_point,graphic_point_numero_mass,graphic_point_massa_per_oggetto
+    if timer>pointTime:
+        pointTime += graphic_Time
+        graphic_point_numero_veicle.append(Graphic_point(num_graphic_point, numero_veicle, (0, 200, 0)))
+        graphic_point_numero_mass.append(Graphic_point(num_graphic_point, numero_mass, (200, 0, 0)))
+        graphic_point_massa_per_oggetto.append(Graphic_point(num_graphic_point, massa_per_oggetto, (0, 0, 200)))
+        num_graphic_point += 1
+        if num_graphic_point>150:
+            graphic_Time += graphic_Time #quando il grafico raggiunge il bordo destro si dimezza
+            graphic_point1 = []
+            graphic_point2 = []
+            graphic_point3 = []
+            for i in range(74):
+                gigi = (graphic_point_numero_veicle[i * 2 + 1].y + graphic_point_numero_veicle[i * 2 + 2].y) / 2
+                graphic_point1.append(Graphic_point(i,gigi,(0,200,0)))
+                gigi = (graphic_point_numero_mass[i * 2 + 1].y + graphic_point_numero_mass[i * 2 + 2].y) / 2
+                graphic_point2.append(Graphic_point(i,gigi,(200,0,0)))
+                gigi = (graphic_point_massa_per_oggetto[i * 2 + 1].y + graphic_point_massa_per_oggetto[i * 2 + 2].y) / 2
+                graphic_point3.append(Graphic_point(i,gigi,(0,0,200)))
+            graphic_point_numero_veicle = []
+            graphic_point_numero_mass = []
+            graphic_point_massa_per_oggetto = []
+            for i in range(74):
+                graphic_point_numero_veicle.append(Graphic_point(i, graphic_point1[i].y, graphic_point1[i].color))
+                graphic_point_numero_mass.append(Graphic_point(i, graphic_point2[i].y, graphic_point2[i].color))
+                graphic_point_massa_per_oggetto.append(Graphic_point(i, graphic_point3[i].y, graphic_point3[i].color))
+            num_graphic_point = 74
+
+
+def show_grafico():
+    j, k = SCHERMO.get_size()
+    pygame.draw.rect(SCHERMO,(250,250,250),(0,0,j,k)) #vari sfondi
+    pygame.draw.rect(SCHERMO,(180,180,180),(100,0,j,k-100))
+    for i in range(10):
+        pygame.draw.line(SCHERMO,(0,0,0),(100,100+i*(k-200)/10),(j,100+i*(k-200)/10),1)
+        assex = FONT2.render(str(1000-i*100), True, (0, 0, 0))
+        SCHERMO.blit(assex, (50, 90+i*(k-200)/10))
+    for i in range(10):
+        pygame.draw.line(SCHERMO,(100,100,100),(100+i*(j-100)/10,0),(100+i*(j-100)/10,k-100),1)
+        assey = FONT2.render(str(int((graphic_Time-i*graphic_Time/10)*150)), True, (0, 0, 0))
+        SCHERMO.blit(assey,(j-i*(j-100)/10-20, k-50))
+    for i in range(num_graphic_point-1):
+        graphic_point_numero_veicle[i + 1].show1()
+        graphic_point_numero_mass[i + 1].show2()
+        graphic_point_massa_per_oggetto[i + 1].show3()
+
+
+def show_simulation():
+    global timer,velocita,cursore_velocita
+    global zoom, x, y
+    global follow, veicle_to_follow, press_timer
+    j, k = SCHERMO.get_size()
+    SCHERMO.fill((65, 125, 150))
+    grafico = False
+    genealogical_tree = False
+    press_timer += 1
+    if press_timer > 10:
+        press_timer = 0
+    if pygame.key.get_pressed()[pygame.K_e]: #con e rimpicciolisci (o il contrario non ricordo)
+        zoom = zoom * 1.05
+    if pygame.key.get_pressed()[pygame.K_q]: #con q zoommi
+        zoom = zoom * 0.95
+    if pygame.key.get_pressed()[pygame.K_w]: # con wasd ci si muove per la mappa, come nei videogame, w = su ,s = giu, a = destra, d = sinistra
+        y += 5 / zoom
+    if pygame.key.get_pressed()[pygame.K_a]:
+        x += 5 / zoom
+    if pygame.key.get_pressed()[pygame.K_s]:
+        y -= 5 / zoom
+    if pygame.key.get_pressed()[pygame.K_d]:
+        x -= 5 / zoom
+    Mx, My = pygame.mouse.get_pos()
+    if pygame.mouse.get_pressed()[0]:
+        if Mx>150 and My<100 and Mx<200: #da qua rilevando la posizione del mouse sai se sta muovendo il cursore e cambiando la velocità
+            velocita = 0
+            cursore_velocita = 0
+        if Mx>200 and My<100 and Mx<250:
+            velocita = 1
+            cursore_velocita = 1
+        if Mx>250 and My<100 and Mx<300:
+            velocita = 2
+            cursore_velocita = 2
+        if Mx > 300 and My < 100 and Mx < 350:
+            velocita = 4
+            cursore_velocita = 3
+        if Mx > 350 and My < 100 and Mx < 400:
+            velocita = 8
+            cursore_velocita = 4
+        if Mx < 100 and My < 100: #un bottone in alto a sinistra che dovrebbe avvaire il grafico e le varie info
+            grafico = True
+        if Mx > j - 100 and My < 100: #se premi in alto a destra salvi la simulazione
+            save()
+    for i in range(numero_veicle):
+        veicle[i].show()
+    for i in range(numero_mass):
+        mass[i].show() #fa vedere le masse presenti nella simulazione, resta da capire perchè compaiono dopo un tot
+    show_bordi() #mostra i bordi della mappa
+    if grafico:
+        show_grafico()
+    #if epoch>=1: #da completare in futuro, usato solo per test
+        #ancestor[0].show()
+    # cursore velocità
+    pygame.draw.line(SCHERMO, 100, (150, 50), (350, 50), 10)
+    pygame.draw.circle(SCHERMO, (0, 0, 255), (cursore_velocita * 50 + 150, 50), 20, 0)
+    # cerchio timer
+    pygame.draw.circle(SCHERMO, (255, 255, 255), (80, 50), 50, 0)
+    timer_render = FONT1.render(str(timer), True, (0, 0, 0))
     SCHERMO.blit(timer_render, (50, 35))
     # cerchio save
     pygame.draw.circle(SCHERMO, (255, 255, 255), (j-50, 50), 50, 0)
@@ -1229,7 +2639,7 @@ def show_base(): #qui si vedono le cose base della simualzione per farla andare 
     SCHERMO.blit(timer_render, (70, 87))
     num_plant_render = FONT1.render(str(numero_veicle), True, (0, 0, 0)) #poi il numero di veicle
     SCHERMO.blit(num_plant_render, (10, 167))
-    num_mass_render = FONT1.render(str(massa_nel_sistema), True, (0, 0, 0)) #poi la massa nella simulazione
+    num_mass_render = FONT1.render(str(numero_mass), True, (0, 0, 0)) #poi la massa nella simulazione
     SCHERMO.blit(num_mass_render, (110, 167))
     pygame.display.flip()
     clock.tick(500)
@@ -1239,13 +2649,10 @@ def show_base(): #qui si vedono le cose base della simualzione per farla andare 
 accensione()
 finished = False
 while not finished:
-    mille += 1
     simulation()
-    if not mille > 100:
-        if grafica:
-            show_simulation()
-        else:
-            show_base()
+    if grafica:
+        show_simulation()
     else:
-        mille = 0
-        show_simulation() #questa grandissima stronazata serviva per ovvaire al casino spiegato in precedenza, praticamente in modalità non grafica la simulazione rallentava inspiegabilmente, in questo modo ogni 100 frame attivo la modalità grafica per sistemare questo problema, si è bruttissimo da vedere ma tempo che leggi questo mex lavrò già sistemata
+        show_base()
+    for i in range(numero_veicle):
+        veicle[i].collision_detection = False #resetta le collision_detection  su False solo alla fine di tutto il calcolo, è solo momentaneo, poi verrà sistemato
