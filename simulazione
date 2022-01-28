@@ -46,6 +46,7 @@ epoch_timer = 0 #timer per scandire ogni epoca, pensavo di fare un epoca = 10000
 epoch = 0 #numero di epoche passate dall'inizio della simulazione
 num_candidates_ancestor = 0 #numero di candidati per diventare anchestor
 num_ancestor = 0 #numero di elemanti nell'albero genealogico
+num_ancestor_per_epoch = []
 follow = False
 veicle_to_follow = 0 #id veicle da seguire
 press_timer = 0 #serve per premere certi tasti che per ora non ci sono, (viene dalle vecchie simulazioni dove potevi schiacciare su un esserino e seguirlo)
@@ -98,9 +99,9 @@ class Mass:   #questa classe inizializza le proprietà "meccaniche"/visive, emm 
                                 if veicle[g].DNA[ii*3+3] == 3 or veicle[g].DNA[ii*3+3] == 4 or veicle[g].DNA[ii*3+3] == 5 or veicle[g].DNA[ii*3+3] == 6: #ed è una bocca
                                     pos2x = veicle[g].x + math.sin(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 1] + math.sin(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 2]  #e la sua posizione rispetto al veicolo
                                     pos2y = veicle[g].y + math.cos(veicle[g].angle) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 1] + math.cos(veicle[g].angle + math.pi / 2) * veicle[g].r * 30 * veicle[g].DNA[ii * 3 + 2]
-                                    if dist(self.x,self.y,pos2x,pos2y)<15*veicle[g].r: #è esattamente la posizione della massa nel raggio di dimensione del blocchetto
-                                        print("aaaaaaaaaaaaaaaaaaaaaa") #bhe per ora non succede niente, stampoa aaaaaaaa, in futuro la massa viene assorbita (sarebbe carino che in base alla dimensione del veicolo che mangia la assorbe più o meno lentamente)
-                                        print(g)
+                                    #if dist(self.x,self.y,pos2x,pos2y)<15*veicle[g].r: #è esattamente la posizione della massa nel raggio di dimensione del blocchetto
+                                        #print("aaaaaaaaaaaaaaaaaaaaaa") #bhe per ora non succede niente, stampoa aaaaaaaa, in futuro la massa viene assorbita (sarebbe carino che in base alla dimensione del veicolo che mangia la assorbe più o meno lentamente)
+                                        #print(g)
 
 
     def show(self):
@@ -108,7 +109,7 @@ class Mass:   #questa classe inizializza le proprietà "meccaniche"/visive, emm 
             j, k = SCHERMO.get_size()
             X = (self.x + x) * zoom + j / 2
             Y = (self.y + y) * zoom + k / 2
-            if X>0 and Y>0 and X<j and Y < k: #se l'oggetto non è sullo schermo allora non lo elabora
+            if X>0 and Y>0 and X<j and Y < k and self.mass>0: #se l'oggetto non è sullo schermo allora non lo elabora
                 r = math.sqrt(self.mass/1000)
                 j, k = SCHERMO.get_size()
                 X = (self.x + x) * zoom + j / 2 #calcola le coordinate di dove stampare a schermo
@@ -667,23 +668,26 @@ class stomach: #mette da parte l'energia non utilizzata
 
 
 class Veicle:
-    def __init__(self, xp, yp, r, xforce, yforce, DNA,id_ancestor):
-        self.age = r*100 #età che ha il veicolo, se supera una soglia muore di vecchiaia, ora si basa su r che sarebbe un parametro che ne determina la dimensione in modo che a inizio simulazione non muoiono tutti assieme dopo un tot di tempo, dovrà essere modifiacato
-        self.x = xp
-        self.y = yp
-        self.r = (r + random.randint(-100, 100)) / 1000 + 1 #possiamo dire che determina le dimensioni del veicolo, r sta per raggio (ancora da quando nella simulazione i veicle erano dei cerchi)
-        self.vx = 0 #velocità sull'asse x
-        self.vy = 0 #velocità sull'asse y
+    def __init__(self,DNA ,RNA ,CIV):
+        self.initial_r = RNA[0]
+        self.max_r = RNA[1]*2
+        self.max_age = RNA[2]*100000
+        self.spawn_range = RNA[3]*1000 #range dove può nascere un "figlio", in futuro verrà determonato da un altro DNA
+        self.age = CIV[3] #età che ha il veicolo, se supera una soglia muore di vecchiaia, ora si basa su r che sarebbe un parametro che ne determina la dimensione in modo che a inizio simulazione non muoiono tutti assieme dopo un tot di tempo, dovrà essere modifiacato
+        self.x = CIV[0]
+        self.y = CIV[1]
+        self.r = (CIV[2]) / 1000 + 1 #possiamo dire che determina le dimensioni del veicolo, r sta per raggio (ancora da quando nella simulazione i veicle erano dei cerchi)
+        self.vx = CIV[4] #velocità sull'asse x
+        self.vy = CIV[5] #velocità sull'asse y
         self.v = 0 #velocità
         self.life = 1 #semplicemente un valore che non deve essere 0, altrimenti vuol dire che il veicle è morto
-        self.xforce = xforce #forza applicata sull'asse x
-        self.yforce = yforce #forza applicata sull'asse y
+        self.xforce = 0 #forza applicata sull'asse x
+        self.yforce = 0 #forza applicata sull'asse y
         self.ax = 0 #accellerazione sull'asse x
         self.ay = 0 #accellerazione sull'asse y
         self.friction = 0 #atrito
         self.weight = 0 #massa totale del veicle, viene calcolata in seguito
-        self.angle = random.uniform(-math.pi, math.pi) #la direzione
-        self.spawn_range = 1000 #range dove può nascere un "figlio", in futuro verrà determonato da un altro DNA
+        self.angle = CIV[6] #la direzione
         self.sail = 0 #numero di vele, viene calcolato dopo
         self.numero_stomach = 0 #numero di stomaci, viene calcolato dopo
         self.numero_leaf = 0 #numero foglie
@@ -754,7 +758,10 @@ class Veicle:
         self.direzzione_corrente = random.uniform(-math.pi, math.pi)
         self.torsione_corrente = random.uniform(-1, 1)
         self.rigeneration = False
-        self.id_ancestor = id_ancestor #questo è insufficente per fare l'albero genealogico ma ci lavorerò i prossimi giorni
+        self.id_ancestor = CIV[7] #questo è insufficente per fare l'albero genealogico ma ci lavorerò i prossimi giorni
+        self.id = CIV[8]
+        self.RNA = RNA
+        self.CIV = CIV
 
 
     def move(self):
@@ -809,22 +816,22 @@ class Veicle:
             self.torsion_force += self.torsione_corrente * self.sail
         self.ax = self.xforce/ self.mass
         self.ay = self.yforce/ self.mass
-        self.vx = self.vx + (self.ax - 0.01*math.sqrt(self.vx ** 2)*self.vx) * velocita
-        self.vy = self.vy + (self.ay - 0.01*math.sqrt(self.vy ** 2)*self.vy) * velocita
-        if self.vx < 0.05 and self.vx > -0.05: #in questo modo non calcola spostamenti piccoli e inutili
+        self.vx = self.vx + (self.ax - 0.01*math.sqrt(self.vx ** 2)*self.vx) * cursore_velocita
+        self.vy = self.vy + (self.ay - 0.01*math.sqrt(self.vy ** 2)*self.vy) * cursore_velocita
+        if self.vx < 0.04 * cursore_velocita and self.vx > -0.04 * cursore_velocita: #in questo modo non calcola spostamenti piccoli e inutili
             self.vx = 0
-        if self.vy < 0.05 and self.vy > -0.05:
+        if self.vy < 0.04 * cursore_velocita and self.vy > -0.04 * cursore_velocita:
             self.vy = 0
         #self.d = math.atan2(self.yforce, self.xforce) #roba vecchia e sbagliaa
         self.x = self.x + self.vx * velocita
         self.y = self.y + self.vy * velocita
         if self.vx > 100 or self.vx < -100: #a volte per a formula self.vx = self.vx + (self.ax - 0.01*math.sqrt(self.vx ** 2)*self.vx) * velocita, vx diventa troppo grande e da errore, è da sistemare, per ora il veicolo semplicemente muore
             self.life = 0
-            print("ciao")
-            print(self.vx)
+            #print("ciao")
+            #print(self.vx)
         if self.vy > 100 or self.vy < -100:
             self.life = 0
-            print("wow")
+            #print("wow")
         self.v = math.sqrt(self.vx**2+self.vy**2)
         if self.vx != 0 or self.vy != 0: #controlla se si sta muovendo
             self.move_check = True
@@ -832,24 +839,24 @@ class Veicle:
             self.move_check = False
             self.timer_ottimizazzione = 100
         if self.energy < 0:
-            print("energy")
+            #print("energy")
             self.life = 0
-        if self.age>100000:
-            print("minchia")
+        if self.age>self.max_age:
+            #print("minchia")
             self.life = 0
         if self.block[0].life <= 0: #se manca il blocco principale il veicle muore
             self.life = 0
-            print("miao")
+            #print("miao")
         #if self.r < 2:
             #self.r += 0.0001 * velocita
         self.velocita_angolare += (self.torsion_force/self.mass*0.1-1000*self.r*math.sqrt(self.velocita_angolare**2)*(self.velocita_angolare+0.001))*0.01
         self.angle += self.velocita_angolare*velocita
-        if self.r >= 2: #raggiunta una certa dimensione si riproduce
-            self.r = 2
+        if self.r >= self.max_r: #raggiunta una certa dimensione si riproduce
+            self.r = self.max_r
             if numero_veicle < 1000:
-                new_veicle(self.x, self.y, 0, self.spawn_range, self.DNA,self.id_ancestor)#per ora il DNA viene copiato uguale, bisogna aggiungere delle mutazioni
+                new_veicle(self.DNA,self.RNA,self.CIV)#per ora il DNA viene copiato uguale, bisogna aggiungere delle mutazioni
                 numero_veicle += 1
-                self.r -= (self.r/2)**2/self.r
+                self.r -= (self.initial_r)**2/self.r
 
 
     def see(self,id):
@@ -926,6 +933,7 @@ class Veicle:
         if self.y < -map_y_size/2-10:
             self.life = 0
 
+
     def show(self):
         if zoom > 0.01 : #in futuro è da abbassare
             j, k = SCHERMO.get_size()
@@ -959,12 +967,12 @@ class Veicle:
 
 
 class Ancestor: #salta pure questa classe è ancora in fase di costruzione
-    def __init__(self,sample,epoch,pos_y):
+    def __init__(self,sample,epoch,pos2x,pos2y):
         self.epoch = epoch
         self.ancestor = sample.id_ancestor
         self.sample = sample
-        self.sample.x = 0
-        self.sample.y = 0
+        self.ancestorx = pos2x
+        self.ancestory = pos2y
 
 
     def show(self):
@@ -1002,12 +1010,14 @@ def delete_mass(i): #elimina la massa dal sistema
     mass.pop(numero_mass - 1)
 
 
-def new_veicle(xp, yp, r, spawn_range,DNA,id_ancestor):
+def new_veicle(DNA,RNA,CIV):
     global veicle_totali
-    xv = xp + random.randint(-spawn_range, spawn_range)
-    yv = yp + random.randint(-spawn_range, spawn_range)
-    veicle.append(Veicle(xv, yv, r, 0, 0, DNA,id_ancestor))
+    spawn_range = RNA[3]*1000
     veicle_totali += 1
+    xv = CIV[0] + random.randint(-spawn_range, spawn_range)
+    yv = CIV[1] + random.randint(-spawn_range, spawn_range)
+    CIV = [xv, yv, 0, 0, 0, 0, random.uniform(-math.pi, math.pi),CIV[7],veicle_totali]
+    veicle.append(Veicle(DNA,RNA,CIV))
 
 
 def follow_veicle(i):
@@ -1088,6 +1098,12 @@ def collision_detection(id1,id2):
                         veicle[id1].yforce = 0
                         veicle[id2].xforce = 0
                         veicle[id2].yforce = 0
+                        veicle[id1].ax = 0
+                        veicle[id1].ay = 0
+                        veicle[id2].ax = 0
+                        veicle[id2].ay = 0
+                        #print("impatto")
+                        #print(impatto)
                         if veicle[id1].block[ii].life <= 0:
                             mass.append(Mass(pos1x,pos1y,veicle[id1].block[ii].mass*1000*veicle[id1].r*veicle[id1].r,1)) #genera una massa dove è stato perso un blocchetto, ce un problema però, la massa viene creata svariati frame dopo l'impatto, cosa assolutamente da sistemare
                             numero_mass += 1
@@ -1100,6 +1116,36 @@ def collision_detection(id1,id2):
                             if veicle[id2].block[i].r==3:
                                 veicle[id2].sail -= 1
                                 veicle[id2].torsion_force = 0
+
+
+def genealogical_tree():
+    global candidates_ancestor,num_candidates_ancestor,num_ancestor,num_ancestor_per_epoch
+    n_a_p_e = 0
+    for i in range(num_candidates_ancestor):
+        for ii in range(numero_veicle):
+            if veicle[ii].id_ancestor == candidates_ancestor[i].sample.id_ancestor:
+                ancestor.append(candidates_ancestor[i])
+                num_ancestor += 1
+                candidates_ancestor[i].sample.id_ancestor = 0
+                n_a_p_e += 1
+    num_ancestor_per_epoch.append(n_a_p_e)
+    for i in range(n_a_p_e):
+        ancestor[i].sample.x = 2000 +map_x_size/2+epoch*2000
+        ancestor[i].sample.y = i*1000-n_a_p_e/2*1000#-(ancestor[i].sample.id_ancestor-1)*100
+    candidates_ancestor = []
+    num_candidates_ancestor = 0
+    for i in range(numero_veicle):
+        veicle[i].CIV[7] = i+1
+        candidates_ancestor.append(Ancestor(Veicle(veicle[i].DNA,veicle[i].RNA,veicle[i].CIV),epoch,0,0))
+        num_candidates_ancestor += 1
+    print(num_ancestor)
+    print(numero_veicle)
+
+
+def show_genealogical_tree():
+    for i in range(num_ancestor):
+        ancestor[i].sample.show()
+        #pygame.draw.line(SCHERMO,(0,0,0),(ancestor[i].sample.x,ancestor[i].sample.y),(ancestor[i].ancestorx,ancestor[i].ancestory),3)
 
 
 def accensione(): #avvio della simulazione, ci sono 2 tasti che ti fanno scegliere se avvaire una nuova simulazione (verde a sinistra) o caricarne una gia fatta (arancione a destra[non funziona per ora])
@@ -1132,8 +1178,18 @@ def randomizazzione():
     numero_veicle = 900 #ora è fisso a 900, ricordo che per ora dentro a veicle ce una funzione che impedisce di riprodursi quando ci sono 1000 veicle
     veicle_info = []
     DNA = [14,0,0,0,1,0,5,-1,0,17,0,1,2,0,-1,2,0,2,1,0,3,1,0,-2,1,0,-3,1,-1,1,7,-1,-1,7,1,1,12,1,-1,12,-3,0,13] #DNA fatto a mano da me per creare un veicle sensato, ma l'obbiettivo è che i primi DNA siano random (ovvaimente seguendo una certa logica)
+    RNA = [1,1,1,1]
     for i in range(numero_veicle): #genera le info per i veicle che per ora sono solo i DNA dei blocchetti, in futuro saranno molte più info
-        veicle_info.append([random.randint(int(-map_x_size / 2), int(map_x_size / 2)), random.randint(int(-map_y_size / 2), int(map_y_size / 2)), random.randint(0, 1000),0,DNA])
+        xv = random.randint(int(-map_x_size / 2), int(map_x_size / 2))
+        yv = random.randint(int(-map_y_size / 2), int(map_y_size / 2))
+        r = random.randint(0, 1000)
+        age = r * 100
+        vx = 0
+        vy = 0
+        angle = random.uniform(-math.pi, math.pi)
+        id_ancestor = i+1
+        CIV = [xv, yv, r, age, vx, vy, angle, id_ancestor, i+1]
+        veicle_info.append([DNA ,RNA ,CIV])
 
 
 def inizializza(): #prende tutte le info e avvia la simulazione
@@ -1142,14 +1198,12 @@ def inizializza(): #prende tutte le info e avvia la simulazione
     global veicle_info,massa_nel_sistema,massa_nel_sistema1,num_candidates_ancestor
     veicle = []
     for i in range(numero_veicle):
-        new_veicle(int(veicle_info[i][0]), int(veicle_info[i][1]), float(veicle_info[i][2]), int(veicle_info[i][3]), veicle_info[i][4],i) #crea nuovi veicle
+        veicle.append(Veicle(veicle_info[i][0], veicle_info[i][1], veicle_info[i][2])) #crea nuovi veicle
         veicle_totali += 1
+        candidates_ancestor.append(Ancestor(Veicle(veicle_info[i][0], veicle_info[i][1], veicle_info[i][2]),0,0,0))
         for ii in range(veicle[i].DNA[0]):
             massa_nel_sistema1 += veicle[i].block[ii].mass*1000*veicle[i].r*veicle[i].r #calcola la massa iniziale del sistema, che poi dovrà essere costante
     massa_nel_sistema = massa_nel_sistema1
-    mass = []
-    for i in range(numero_veicle): #test per l'albero genealogico
-        candidates_ancestor.append(Ancestor(Veicle(0, 0, 1, 0, 0, veicle_info[i][4],i),0,0))
     num_candidates_ancestor = numero_veicle
 
 
@@ -1205,26 +1259,12 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
     timer_ottimizazzione += 1
     numero_leaf = 0
     numero_mouth = 0
-    epoch_timer += velocita
-    #if epoch_timer>10000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
-        #print(num_candidates_ancestor)
-        #epoch_timer = 0
-        #epoch += 1
-        #for i in range(num_candidates_ancestor):
-            #for ii in range(numero_veicle):
-                #if veicle[ii].id_ancestor == candidates_ancestor[i].sample.id_ancestor:
-                    #ancestor.append(candidates_ancestor[i])
-                    #num_ancestor += 1
-        #for i in range(numero_veicle):
-            #veicle[i].id_ancestor = i
-        #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-        #print(num_ancestor)
-        #print(numero_veicle)
-        #candidates_ancestor = []
-        #num_candidates_ancestor = 0
-        #for i in range(numero_veicle):
-            #candidates_ancestor.append(Ancestor(Veicle(0,0,1,0,0,veicle[i].DNA,veicle[i].id_ancestor),epoch,0))
-            #num_candidates_ancestor += 1
+    #epoch_timer += velocita
+    if epoch_timer>1000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
+        print(num_candidates_ancestor)
+        epoch_timer = 0
+        epoch += 1
+        genealogical_tree()
     if timer_ottimizazzione>100:
         #print(massa_per_oggetto)
         timer_ottimizazzione = 0
@@ -1244,7 +1284,7 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
         for i in range(numero_mass):
             massa_nel_sistema += mass[i].mass  #calcola la massa attuale nel sistema conatndo anche la massa nelle classi mass
         differenza_massa = massa_nel_sistema1 - massa_nel_sistema #calcola la differenza di massa che dovrebbe esserci
-        print(massa_nel_sistema1 - massa_nel_sistema)
+        #print(massa_nel_sistema1 - massa_nel_sistema)
     if velocita>0:
         massa_libera_nel_sistema += differenza_massa/(200*velocita) #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
     for i in range(numero_mass):
@@ -1277,6 +1317,8 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
             delete_mass(i)
     grafico() #mette le nuove info nel grafico
     timer += 1 * velocita #il tempo della simulazione viene aumentato per la velocità
+    #print(veicle[1].vy)
+    #print(veicle[1].vx)
 
 
 class Graphic_point: #classe che identifica i punti sui grafici
@@ -1320,7 +1362,7 @@ def grafico():
         pointTime += graphic_Time
         graphic_point_numero_veicle.append(Graphic_point(num_graphic_point, numero_veicle, (0, 200, 0)))
         graphic_point_numero_mass.append(Graphic_point(num_graphic_point, numero_mass, (200, 0, 0)))
-        graphic_point_massa_per_oggetto.append(Graphic_point(num_graphic_point, massa_per_oggetto, (0, 0, 200)))
+        graphic_point_massa_per_oggetto.append(Graphic_point(num_graphic_point, massa_per_oggetto*20/velocita, (0, 0, 200)))
         num_graphic_point += 1
         if num_graphic_point>150:
             graphic_Time += graphic_Time #quando il grafico raggiunge il bordo destro si dimezza
@@ -1424,7 +1466,7 @@ def show_simulation():
     if grafico:
         show_grafico()
     #if epoch>=1: #da completare in futuro, usato solo per test
-        #ancestor[0].show()
+        #show_genealogical_tree()
     # cursore velocità
     pygame.draw.line(SCHERMO, 100, (150, 50), (350, 50), 10)
     pygame.draw.circle(SCHERMO, (0, 0, 255), (cursore_velocita * 50 + 150, 50), 20, 0)
