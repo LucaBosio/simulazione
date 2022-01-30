@@ -1118,34 +1118,65 @@ def collision_detection(id1,id2):
                                 veicle[id2].torsion_force = 0
 
 
+def prova(e):
+    #print("prova")
+    #print(e.id)
+    return e.ancestory
+
+
 def genealogical_tree():
     global candidates_ancestor,num_candidates_ancestor,num_ancestor,num_ancestor_per_epoch
     n_a_p_e = 0
+    n_a_p_e_a = []               
     for i in range(num_candidates_ancestor):
         for ii in range(numero_veicle):
-            if veicle[ii].id_ancestor == candidates_ancestor[i].sample.id_ancestor:
-                ancestor.append(candidates_ancestor[i])
+            if veicle[ii].id_ancestor == candidates_ancestor[i].sample.id_ancestor:                
                 num_ancestor += 1
+                candidates_ancestor[i].id = num_ancestor
+                n_a_p_e_a.append(candidates_ancestor[i])
                 candidates_ancestor[i].sample.id_ancestor = 0
                 n_a_p_e += 1
     num_ancestor_per_epoch.append(n_a_p_e)
+    n_a_p_e_a.sort(key=prova)
     for i in range(n_a_p_e):
-        ancestor[i].sample.x = 2000 +map_x_size/2+epoch*2000
-        ancestor[i].sample.y = i*1000-n_a_p_e/2*1000#-(ancestor[i].sample.id_ancestor-1)*100
+        ancestor.append(n_a_p_e_a[i])
+    for i in range(n_a_p_e):
+        ancestor[num_ancestor-n_a_p_e+i].sample.x = 2000 +map_x_size/2+epoch*2000
+        ancestor[num_ancestor-n_a_p_e+i].sample.y = i*1000-n_a_p_e/2*1000#-(ancestor[i].sample.id_ancestor-1)*100
     candidates_ancestor = []
     num_candidates_ancestor = 0
-    for i in range(numero_veicle):
-        veicle[i].CIV[7] = i+1
-        candidates_ancestor.append(Ancestor(Veicle(veicle[i].DNA,veicle[i].RNA,veicle[i].CIV),epoch,0,0))
-        num_candidates_ancestor += 1
-    print(num_ancestor)
+    print(epoch)
+    print(n_a_p_e)
     print(numero_veicle)
+    for i in range(numero_veicle):
+        X = 0
+        Y = 0
+        if epoch>1:
+            for ii in range(n_a_p_e):
+                if veicle[i].id_ancestor == ancestor[num_ancestor-n_a_p_e+ii].id:
+                    X = ancestor[num_ancestor-n_a_p_e+ii].sample.x
+                    Y = ancestor[num_ancestor-n_a_p_e+ii].sample.y
+        a = veicle[i].id_ancestor
+        veicle[i].CIV[7] = ancestor[a].id #num_ancestor+i+1
+        veicle[i].id_ancestor = ancestor[a].id #num_ancestor+i+1
+        candidates_ancestor.append(Ancestor(Veicle(veicle[i].DNA,veicle[i].RNA,veicle[i].CIV),a,epoch,X,Y))
+        num_candidates_ancestor += 1
 
 
 def show_genealogical_tree():
+    j, k = SCHERMO.get_size()
     for i in range(num_ancestor):
+        X1 = (ancestor[i].sample.x + x) * zoom + j / 2
+        Y1 = (ancestor[i].sample.y + y) * zoom + k / 2
+        X2 = (ancestor[i].ancestorx + x) * zoom + j / 2
+        Y2 = (ancestor[i].ancestory + y) * zoom + k / 2
         ancestor[i].sample.show()
-        #pygame.draw.line(SCHERMO,(0,0,0),(ancestor[i].sample.x,ancestor[i].sample.y),(ancestor[i].ancestorx,ancestor[i].ancestory),3)
+        A = FONT1.render(str(ancestor[i].id), True, (0, 0, 0))  # dati utili da stampare a video per fare le varie prove
+        SCHERMO.blit(A, (X1, Y1 - 45))
+        B = FONT1.render(str(ancestor[i].ancestor), True, (0, 0, 0))
+        SCHERMO.blit(B, (X1, Y1 - 30))
+        if i>num_ancestor_per_epoch[0]:
+            pygame.draw.line(SCHERMO,(0,0,0),(X1,Y1),(X2,Y2),3)
 
 
 def accensione(): #avvio della simulazione, ci sono 2 tasti che ti fanno scegliere se avvaire una nuova simulazione (verde a sinistra) o caricarne una gia fatta (arancione a destra[non funziona per ora])
