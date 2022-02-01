@@ -20,8 +20,8 @@ velocita = 1 #velocità della simulazione (al massimo arriva a 8x)
 cursore_velocita = 1 #sia per stampare a video il cursore per scegliere la velocità sia per certi calcoli
 x = 0 #posizione x di dove stai guardando
 y = 0 #posizione y di dove stai guardando
-map_x_size = 100000 #dimensioni mappa (rispetto alla scorsa simulazione è 10x10 volte più grande)
-map_y_size = 100000
+map_x_size = 30000 #dimensioni mappa (rispetto alla scorsa simulazione è 10x10 volte più grande)
+map_y_size = 30000
 numero_veicle = 0 #numro dei veicoli (esserini) che verrà aggiunto più tardi in randomizazzione o in load
 numero_mass = 0 #numero di blocchetti massa totali
 mass = []
@@ -670,7 +670,7 @@ class stomach: #mette da parte l'energia non utilizzata
 class Veicle:
     def __init__(self,DNA ,RNA ,CIV):
         self.initial_r = RNA[0]
-        self.max_r = RNA[1]*2
+        self.max_r = RNA[1]+RNA[0]
         self.max_age = RNA[2]*100000
         self.spawn_range = RNA[3]*1000 #range dove può nascere un "figlio", in futuro verrà determonato da un altro DNA
         self.age = CIV[3] #età che ha il veicolo, se supera una soglia muore di vecchiaia, ora si basa su r che sarebbe un parametro che ne determina la dimensione in modo che a inizio simulazione non muoiono tutti assieme dopo un tot di tempo, dovrà essere modifiacato
@@ -760,8 +760,8 @@ class Veicle:
         self.rigeneration = False
         self.id_ancestor = CIV[7] #questo è insufficente per fare l'albero genealogico ma ci lavorerò i prossimi giorni
         self.id = CIV[8]
-        self.RNA = RNA
-        self.CIV = CIV
+        self.RNA = [self.initial_r,self.max_r-self.initial_r,self.max_age/100000,self.spawn_range/1000]
+        self.CIV = [self.x, self.y, 0, 0, 0, 0, random.uniform(-math.pi, math.pi),self.id_ancestor,veicle_totali]
 
 
     def move(self):
@@ -849,7 +849,7 @@ class Veicle:
             #print("miao")
         #if self.r < 2:
             #self.r += 0.0001 * velocita
-        self.velocita_angolare += (self.torsion_force/self.mass*0.1-1000*self.r*math.sqrt(self.velocita_angolare**2)*(self.velocita_angolare+0.001))*0.01
+        self.velocita_angolare += (self.torsion_force/self.mass*0.1-1000*math.sqrt(self.velocita_angolare**2)*(self.velocita_angolare+0.001))*0.01
         self.angle += self.velocita_angolare*velocita
         if self.r >= self.max_r: #raggiunta una certa dimensione si riproduce
             self.r = self.max_r
@@ -935,24 +935,24 @@ class Veicle:
 
 
     def show(self):
-        if zoom > 0.01 : #in futuro è da abbassare
+        if zoom > 0.02 : #in futuro è da abbassare
             j, k = SCHERMO.get_size()
             X = (self.x + x) * zoom + j / 2
             Y = (self.y + y) * zoom + k / 2
             if X>0 and Y>0 and X<j and Y < k:
-                if self.collision_detection:
-                    pygame.draw.circle(SCHERMO, (255, 0, 0), (X, Y), zoom*(400), 2) #diventa rosso quando avviene un impatto
-                else:
-                    pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom * (400), 2) #verde altrimenti
+                #if self.collision_detection:
+                    #pygame.draw.circle(SCHERMO, (255, 0, 0), (X, Y), zoom*(400), 2) #diventa rosso quando avviene un impatto
+                #else:
+                    #pygame.draw.circle(SCHERMO, (0, 255, 0), (X, Y), zoom * (400), 2) #verde altrimenti
                 #pygame.draw.circle(SCHERMO, (0, 155, 0), (X, Y), 2 * zoom * 50, 0)
                 for i in range(self.DNA[0]):
                     #if self.DNA[i*3+3] == 12: #roba strana
                         #pygame.draw.line(SCHERMO, (150, 150, 150), (X, Y), (X + math.sin(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.sin(self.angle + math.pi / 2) * zoom * self.r * 30 * self.DNA[i*3+2],Y + math.cos(self.angle) * zoom * self.r * 30 * self.DNA[i*3+1] + math.cos(self.angle + math.pi / 2) * zoom * self.r * 30 *self.DNA[i*3+2]), int(5 * zoom * self.r))
                     if self.block[i].life>0:
                         self.block[i].draw(SCHERMO, [0, 0, zoom*self.r*30, zoom*self.r*30], self.r, self.angle, 0, X, Y)
-                #A = FONT1.render(str(self.id_collision_detection), True, (0, 0, 0)) #dati utili da stampare a video per fare le varie prove
+                #A = FONT1.render(str(self.id), True, (0, 0, 0)) #dati utili da stampare a video per fare le varie prove
                 #SCHERMO.blit(A, (X, Y-45))
-                #B = FONT1.render(str(id), True, (0, 0, 0))
+                #B = FONT1.render(str(self.id_ancestor), True, (0, 0, 0))
                 #SCHERMO.blit(B, (X, Y-30))
                 #C = FONT1.render(str(self.move_check), True, (0, 0, 0))
                 #SCHERMO.blit(C, (X, Y-15))
@@ -967,7 +967,8 @@ class Veicle:
 
 
 class Ancestor: #salta pure questa classe è ancora in fase di costruzione
-    def __init__(self,sample,epoch,pos2x,pos2y):
+    def __init__(self,sample,id,epoch,pos2x,pos2y):
+        self.id = id
         self.epoch = epoch
         self.ancestor = sample.id_ancestor
         self.sample = sample
@@ -1001,8 +1002,9 @@ def delete_veicle(ii):
             numero_blocchetti += 1
     mass.append(Mass(veicle[ii].x, veicle[ii].y, massa * 1000 * veicle[ii].r * veicle[ii].r,numero_blocchetti))
     numero_mass += 1
-    veicle[ii]=veicle[numero_veicle - 1] #sostituisce il veicle morto con lultimo veicle dell ì'array
-    veicle.pop(numero_veicle - 1) #elimina l'ultimo elemanto dell'array, non ricordo perchè ma questa operazione mi evitava problemi
+    #veicle[ii]=veicle[numero_veicle - 1] #sostituisce il veicle morto con lultimo veicle dell ì'array
+    #veicle.pop(numero_veicle - 1) #elimina l'ultimo elemanto dell'array, non ricordo perchè ma questa operazione mi evitava problemi
+    veicle.pop(ii)
 
 
 def delete_mass(i): #elimina la massa dal sistema
@@ -1012,11 +1014,18 @@ def delete_mass(i): #elimina la massa dal sistema
 
 def new_veicle(DNA,RNA,CIV):
     global veicle_totali
-    spawn_range = RNA[3]*1000
+    spawn_range = int(RNA[3]*1000)
     veicle_totali += 1
     xv = CIV[0] + random.randint(-spawn_range, spawn_range)
     yv = CIV[1] + random.randint(-spawn_range, spawn_range)
     CIV = [xv, yv, 0, 0, 0, 0, random.uniform(-math.pi, math.pi),CIV[7],veicle_totali]
+    print(CIV)
+    for i in range(len(RNA)):
+        RNA[i] += random.uniform(-0.01,0.01)*RNA[i]
+        if RNA[i]>3:
+            RNA[i]=3
+        if RNA[i]<0.3:
+            RNA[i]=0.3
     veicle.append(Veicle(DNA,RNA,CIV))
 
 
@@ -1127,40 +1136,51 @@ def prova(e):
 def genealogical_tree():
     global candidates_ancestor,num_candidates_ancestor,num_ancestor,num_ancestor_per_epoch
     n_a_p_e = 0
-    n_a_p_e_a = []               
-    for i in range(num_candidates_ancestor):
-        for ii in range(numero_veicle):
-            if veicle[ii].id_ancestor == candidates_ancestor[i].sample.id_ancestor:                
-                num_ancestor += 1
-                candidates_ancestor[i].id = num_ancestor
-                n_a_p_e_a.append(candidates_ancestor[i])
-                candidates_ancestor[i].sample.id_ancestor = 0
-                n_a_p_e += 1
+    n_a_p_e_a = []
+    array = []
+    bo = []
+    bob = 0
+    for ii in range(numero_veicle):
+        check = True
+        for i in range(num_candidates_ancestor):
+            if veicle[ii].id_ancestor == candidates_ancestor[i].id:
+                for iii in range(len(array)):
+                    if array[iii][0] == veicle[ii].id_ancestor:
+                        veicle[ii].id_ancestor = array[iii][1]
+                        check = False
+                if check:
+                    n_a_p_e_a.append(candidates_ancestor[i])
+                    n_a_p_e_a[n_a_p_e].sample.id_ancestor = num_ancestor
+                    array.append([veicle[ii].id_ancestor,num_ancestor])
+                    veicle[ii].id_ancestor = num_ancestor
+                    n_a_p_e += 1
+                    num_ancestor += 1
+                bo.append([ii,veicle[ii].id_ancestor,bob])
+                bob+=1
+                break
+    print(bo)
     num_ancestor_per_epoch.append(n_a_p_e)
     n_a_p_e_a.sort(key=prova)
     for i in range(n_a_p_e):
         ancestor.append(n_a_p_e_a[i])
     for i in range(n_a_p_e):
-        ancestor[num_ancestor-n_a_p_e+i].sample.x = 2000 +map_x_size/2+epoch*2000
-        ancestor[num_ancestor-n_a_p_e+i].sample.y = i*1000-n_a_p_e/2*1000#-(ancestor[i].sample.id_ancestor-1)*100
+        ancestor[num_ancestor-n_a_p_e+i].sample.x = 1000 +map_x_size/2+epoch*1000
+        ancestor[num_ancestor-n_a_p_e+i].sample.y = i*500-n_a_p_e/2*500#-(ancestor[i].sample.id_ancestor-1)*100
     candidates_ancestor = []
     num_candidates_ancestor = 0
     print(epoch)
     print(n_a_p_e)
     print(numero_veicle)
     for i in range(numero_veicle):
-        X = 0
-        Y = 0
-        if epoch>1:
-            for ii in range(n_a_p_e):
-                if veicle[i].id_ancestor == ancestor[num_ancestor-n_a_p_e+ii].id:
-                    X = ancestor[num_ancestor-n_a_p_e+ii].sample.x
-                    Y = ancestor[num_ancestor-n_a_p_e+ii].sample.y
         a = veicle[i].id_ancestor
-        veicle[i].CIV[7] = ancestor[a].id #num_ancestor+i+1
-        veicle[i].id_ancestor = ancestor[a].id #num_ancestor+i+1
-        candidates_ancestor.append(Ancestor(Veicle(veicle[i].DNA,veicle[i].RNA,veicle[i].CIV),a,epoch,X,Y))
+        X = ancestor[a].sample.x
+        Y = ancestor[a].sample.y
+        veicle[i].CIV[7] = i #num_ancestor+i+1
+        veicle[i].id_ancestor = i #num_ancestor+i+1
+        #RNA = [veicle[i].initial_r,veicle[i].max_r-veicle[i].initial_r,veicle[i].max_age/100000,veicle[i].spawn_range/1000]
+        candidates_ancestor.append(Ancestor(Veicle(veicle[i].DNA,veicle[i].RNA,veicle[i].CIV),i,epoch,X,Y))
         num_candidates_ancestor += 1
+        #print(veicle[i].id_ancestor)
 
 
 def show_genealogical_tree():
@@ -1170,13 +1190,18 @@ def show_genealogical_tree():
         Y1 = (ancestor[i].sample.y + y) * zoom + k / 2
         X2 = (ancestor[i].ancestorx + x) * zoom + j / 2
         Y2 = (ancestor[i].ancestory + y) * zoom + k / 2
-        ancestor[i].sample.show()
-        A = FONT1.render(str(ancestor[i].id), True, (0, 0, 0))  # dati utili da stampare a video per fare le varie prove
-        SCHERMO.blit(A, (X1, Y1 - 45))
-        B = FONT1.render(str(ancestor[i].ancestor), True, (0, 0, 0))
-        SCHERMO.blit(B, (X1, Y1 - 30))
         if i>num_ancestor_per_epoch[0]:
-            pygame.draw.line(SCHERMO,(0,0,0),(X1,Y1),(X2,Y2),3)
+            pygame.draw.line(SCHERMO,(0,0,0),(X1,Y1),(X2,Y2),int(30*zoom))
+        ancestor[i].sample.show()
+        if zoom>0.1:
+            A = FONT1.render(str(ancestor[i].sample.RNA[0]), True, (0, 0, 0))
+            SCHERMO.blit(A, (X1, Y1 - 45))
+            B = FONT1.render(str(ancestor[i].sample.RNA[1]), True, (0, 0, 0))
+            SCHERMO.blit(B, (X1, Y1 - 30))
+            C = FONT1.render(str(ancestor[i].sample.RNA[2]), True, (0, 0, 0))
+            SCHERMO.blit(C, (X1, Y1 - 15))
+            D = FONT1.render(str(ancestor[i].sample.RNA[3]), True, (0, 0, 0))
+            SCHERMO.blit(D, (X1, Y1 - 0))
 
 
 def accensione(): #avvio della simulazione, ci sono 2 tasti che ti fanno scegliere se avvaire una nuova simulazione (verde a sinistra) o caricarne una gia fatta (arancione a destra[non funziona per ora])
@@ -1206,7 +1231,7 @@ def accensione(): #avvio della simulazione, ci sono 2 tasti che ti fanno sceglie
 def randomizazzione():
     global veicle_info
     global numero_veicle
-    numero_veicle = 900 #ora è fisso a 900, ricordo che per ora dentro a veicle ce una funzione che impedisce di riprodursi quando ci sono 1000 veicle
+    numero_veicle = 100 #ora è fisso a 900, ricordo che per ora dentro a veicle ce una funzione che impedisce di riprodursi quando ci sono 1000 veicle
     veicle_info = []
     DNA = [14,0,0,0,1,0,5,-1,0,17,0,1,2,0,-1,2,0,2,1,0,3,1,0,-2,1,0,-3,1,-1,1,7,-1,-1,7,1,1,12,1,-1,12,-3,0,13] #DNA fatto a mano da me per creare un veicle sensato, ma l'obbiettivo è che i primi DNA siano random (ovvaimente seguendo una certa logica)
     RNA = [1,1,1,1]
@@ -1218,8 +1243,8 @@ def randomizazzione():
         vx = 0
         vy = 0
         angle = random.uniform(-math.pi, math.pi)
-        id_ancestor = i+1
-        CIV = [xv, yv, r, age, vx, vy, angle, id_ancestor, i+1]
+        id_ancestor = i
+        CIV = [xv, yv, r, age, vx, vy, angle, id_ancestor, i]
         veicle_info.append([DNA ,RNA ,CIV])
 
 
@@ -1231,7 +1256,8 @@ def inizializza(): #prende tutte le info e avvia la simulazione
     for i in range(numero_veicle):
         veicle.append(Veicle(veicle_info[i][0], veicle_info[i][1], veicle_info[i][2])) #crea nuovi veicle
         veicle_totali += 1
-        candidates_ancestor.append(Ancestor(Veicle(veicle_info[i][0], veicle_info[i][1], veicle_info[i][2]),0,0,0))
+        veicle_info[i][2][2] = 1
+        candidates_ancestor.append(Ancestor(Veicle(veicle_info[i][0], veicle_info[i][1], veicle_info[i][2]),i,0,0,0))
         for ii in range(veicle[i].DNA[0]):
             massa_nel_sistema1 += veicle[i].block[ii].mass*1000*veicle[i].r*veicle[i].r #calcola la massa iniziale del sistema, che poi dovrà essere costante
     massa_nel_sistema = massa_nel_sistema1
@@ -1287,12 +1313,12 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
                 grafica = True
                 SCHERMO = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     #print(numero_mass)
-    timer_ottimizazzione += 1
+    timer_ottimizazzione += velocita
     numero_leaf = 0
     numero_mouth = 0
-    #epoch_timer += velocita
-    if epoch_timer>1000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
-        print(num_candidates_ancestor)
+    epoch_timer += velocita
+    if epoch_timer>10000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
+        #print(num_candidates_ancestor)
         epoch_timer = 0
         epoch += 1
         genealogical_tree()
@@ -1393,7 +1419,7 @@ def grafico():
         pointTime += graphic_Time
         graphic_point_numero_veicle.append(Graphic_point(num_graphic_point, numero_veicle, (0, 200, 0)))
         graphic_point_numero_mass.append(Graphic_point(num_graphic_point, numero_mass, (200, 0, 0)))
-        graphic_point_massa_per_oggetto.append(Graphic_point(num_graphic_point, massa_per_oggetto*20/velocita, (0, 0, 200)))
+        graphic_point_massa_per_oggetto.append(Graphic_point(num_graphic_point, massa_per_oggetto*20, (0, 0, 200)))
         num_graphic_point += 1
         if num_graphic_point>150:
             graphic_Time += graphic_Time #quando il grafico raggiunge il bordo destro si dimezza
@@ -1496,8 +1522,8 @@ def show_simulation():
     show_bordi() #mostra i bordi della mappa
     if grafico:
         show_grafico()
-    #if epoch>=1: #da completare in futuro, usato solo per test
-        #show_genealogical_tree()
+    if epoch>=1: #da completare in futuro, usato solo per test
+        show_genealogical_tree()
     # cursore velocità
     pygame.draw.line(SCHERMO, 100, (150, 50), (350, 50), 10)
     pygame.draw.circle(SCHERMO, (0, 0, 255), (cursore_velocita * 50 + 150, 50), 20, 0)
