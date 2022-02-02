@@ -764,7 +764,7 @@ class Veicle:
         self.CIV = [self.x, self.y, 0, 0, 0, 0, random.uniform(-math.pi, math.pi),self.id_ancestor,veicle_totali]
 
 
-    def move(self):
+    def move(self,id):
         global numero_veicle
         self.xforce = 0
         self.yforce = 0
@@ -854,7 +854,8 @@ class Veicle:
         if self.r >= self.max_r: #raggiunta una certa dimensione si riproduce
             self.r = self.max_r
             if numero_veicle < 1000:
-                new_veicle(self.DNA,self.RNA,self.CIV)#per ora il DNA viene copiato uguale, bisogna aggiungere delle mutazioni
+                #print(self.id_ancestor)
+                new_veicle(self.DNA,self.RNA,self.CIV,id)#per ora il DNA viene copiato uguale, bisogna aggiungere delle mutazioni
                 numero_veicle += 1
                 self.r -= (self.initial_r)**2/self.r
 
@@ -1002,9 +1003,9 @@ def delete_veicle(ii):
             numero_blocchetti += 1
     mass.append(Mass(veicle[ii].x, veicle[ii].y, massa * 1000 * veicle[ii].r * veicle[ii].r,numero_blocchetti))
     numero_mass += 1
-    #veicle[ii]=veicle[numero_veicle - 1] #sostituisce il veicle morto con lultimo veicle dell ì'array
-    #veicle.pop(numero_veicle - 1) #elimina l'ultimo elemanto dell'array, non ricordo perchè ma questa operazione mi evitava problemi
-    veicle.pop(ii)
+    veicle[ii]=veicle[numero_veicle - 1] #sostituisce il veicle morto con lultimo veicle dell ì'array
+    veicle.pop(numero_veicle - 1) #elimina l'ultimo elemanto dell'array, non ricordo perchè ma questa operazione mi evitava problemi
+    #veicle.pop(ii)
 
 
 def delete_mass(i): #elimina la massa dal sistema
@@ -1012,16 +1013,21 @@ def delete_mass(i): #elimina la massa dal sistema
     mass.pop(numero_mass - 1)
 
 
-def new_veicle(DNA,RNA,CIV):
-    global veicle_totali
+def new_veicle(DNA,RNA,CIV,veicle_id):
+    global veicle_totali,veicle
     spawn_range = int(RNA[3]*1000)
     veicle_totali += 1
     xv = CIV[0] + random.randint(-spawn_range, spawn_range)
     yv = CIV[1] + random.randint(-spawn_range, spawn_range)
-    CIV = [xv, yv, 0, 0, 0, 0, random.uniform(-math.pi, math.pi),CIV[7],veicle_totali]
-    print(CIV)
+    CIV = [xv, yv, 0, 0, 0, 0, random.uniform(-math.pi, math.pi),veicle[veicle_id].id_ancestor,veicle_totali]
+    RNA = [veicle[veicle_id].initial_r,veicle[veicle_id].max_r-veicle[veicle_id].initial_r,veicle[veicle_id].max_age/100000,veicle[veicle_id].spawn_range/1000]
+    if veicle[veicle_id].id_ancestor>num_candidates_ancestor:
+        print([veicle[veicle_id].id_ancestor,veicle_id])
+        CIV = [xv, yv, 0, 0, 0, 0, random.uniform(-math.pi, math.pi), num_candidates_ancestor-1, veicle_totali]
+        veicle[veicle_id].id_ancestor = num_candidates_ancestor-1
+    #print(CIV)
     for i in range(len(RNA)):
-        RNA[i] += random.uniform(-0.01,0.01)*RNA[i]
+        RNA[i] += random.uniform(-0.1,0.1)*RNA[i]
         if RNA[i]>3:
             RNA[i]=3
         if RNA[i]<0.3:
@@ -1032,9 +1038,19 @@ def new_veicle(DNA,RNA,CIV):
 def follow_veicle(i):
     global x, y, zoom
     j, k = SCHERMO.get_size()
+    X1 = (veicle[i].x + x) * zoom + j / 2
+    Y1 = (veicle[i].y + y) * zoom + k / 2
     if i < numero_veicle:
         x = -veicle[i].x
         y = -veicle[i].y
+        A = FONT1.render(str(veicle[i].initial_r), True, (0, 0, 0))
+        SCHERMO.blit(A, (X1, Y1 - 45))
+        B = FONT1.render(str(veicle[i].max_r - veicle[i].initial_r), True, (0, 0, 0))
+        SCHERMO.blit(B, (X1, Y1 - 30))
+        C = FONT1.render(str(veicle[i].max_age / 100000), True, (0, 0, 0))
+        SCHERMO.blit(C, (X1, Y1 - 15))
+        D = FONT1.render(str(veicle[i].spawn_range / 1000), True, (0, 0, 0))
+        SCHERMO.blit(D, (X1, Y1 - 0))
 
 
 def collision_detection(id1,id2):
@@ -1177,8 +1193,8 @@ def genealogical_tree():
         Y = ancestor[a].sample.y
         veicle[i].CIV[7] = i #num_ancestor+i+1
         veicle[i].id_ancestor = i #num_ancestor+i+1
-        #RNA = [veicle[i].initial_r,veicle[i].max_r-veicle[i].initial_r,veicle[i].max_age/100000,veicle[i].spawn_range/1000]
-        candidates_ancestor.append(Ancestor(Veicle(veicle[i].DNA,veicle[i].RNA,veicle[i].CIV),i,epoch,X,Y))
+        RNA = [veicle[i].initial_r,veicle[i].max_r-veicle[i].initial_r,veicle[i].max_age/100000,veicle[i].spawn_range/1000]
+        candidates_ancestor.append(Ancestor(Veicle(veicle[i].DNA,RNA,veicle[i].CIV),i,epoch,X,Y))
         num_candidates_ancestor += 1
         #print(veicle[i].id_ancestor)
 
@@ -1194,13 +1210,13 @@ def show_genealogical_tree():
             pygame.draw.line(SCHERMO,(0,0,0),(X1,Y1),(X2,Y2),int(30*zoom))
         ancestor[i].sample.show()
         if zoom>0.1:
-            A = FONT1.render(str(ancestor[i].sample.RNA[0]), True, (0, 0, 0))
+            A = FONT1.render(str(ancestor[i].sample.initial_r), True, (0, 0, 0))
             SCHERMO.blit(A, (X1, Y1 - 45))
-            B = FONT1.render(str(ancestor[i].sample.RNA[1]), True, (0, 0, 0))
+            B = FONT1.render(str(ancestor[i].sample.max_r-ancestor[i].sample.initial_r), True, (0, 0, 0))
             SCHERMO.blit(B, (X1, Y1 - 30))
-            C = FONT1.render(str(ancestor[i].sample.RNA[2]), True, (0, 0, 0))
+            C = FONT1.render(str(ancestor[i].sample.max_age / 100000), True, (0, 0, 0))
             SCHERMO.blit(C, (X1, Y1 - 15))
-            D = FONT1.render(str(ancestor[i].sample.RNA[3]), True, (0, 0, 0))
+            D = FONT1.render(str(ancestor[i].sample.spawn_range / 1000), True, (0, 0, 0))
             SCHERMO.blit(D, (X1, Y1 - 0))
 
 
@@ -1317,7 +1333,7 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
     numero_leaf = 0
     numero_mouth = 0
     epoch_timer += velocita
-    if epoch_timer>10000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
+    if epoch_timer>100000: #tutta questa parte è incompleta per ora non funziona servono altri dati, poi per fare ordine farò una funzione a parte
         #print(num_candidates_ancestor)
         epoch_timer = 0
         epoch += 1
@@ -1343,7 +1359,7 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
         differenza_massa = massa_nel_sistema1 - massa_nel_sistema #calcola la differenza di massa che dovrebbe esserci
         #print(massa_nel_sistema1 - massa_nel_sistema)
     if velocita>0:
-        massa_libera_nel_sistema += differenza_massa/(200*velocita) #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
+        massa_libera_nel_sistema += differenza_massa/200 #per rendere le cose giuste dovrebbe essere differenza_massa/100 (visto che viene calcolato ogni 100 frame) ma inizia a oscillare e poi crea errori, un valore che funziona va da 200(il minimo utilizzabile) a 1000(più grande non sta dietro alla simulazione e il valore cresce o diminuisce)
     for i in range(numero_mass):
         mass[i].move(i) #calcola la massa, esempio il fatto che marcisca, poi ci sarebbe da mettere mass[i].see() per fare in modo che la massa veda i veicle (e non viceversa) per risparmiare ram
         mass[i].see()
@@ -1351,7 +1367,7 @@ def simulation(): #parte principale, va sempre, anche quando la simulzione non �
     #print(massa_per_oggetto)
     for i in range(numero_veicle):
         #print(veicle[i].r)
-        veicle[i].move()
+        veicle[i].move(i)
         veicle[i].see(i)
         id = veicle[i].id_collision_detection
         if not id >= numero_veicle:
